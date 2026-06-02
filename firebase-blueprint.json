@@ -1,0 +1,30 @@
+{
+  "entities": {
+    "Asset": {
+      "title": "Asset",
+      "description": "An asset tracked in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "DataAquisicao": { "type": "string" },
+        "TipoEquipamento": { "type": "string" },
+        "marca": { "type": "string" },
+        "modelo": { "type": "string" },
+        "serial": { "type": "string" },
+        "NumeroPatrimonio": { "type": "string" },
+        "EstadoEquipamento": { "type": "string" },
+        "observacao": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string" }
+      },
+      "required": ["NumeroPatrimonio", "serial", "marca", "modelo", "TipoEquipamento", "EstadoEquipamento", "DataAquisicao"]
+    }
+  },
+  "firestore": {
+    "/assets/{assetId}": {
+      "schema": "Asset",
+      "description": "Collection of assets"
+    }
+  }
+}

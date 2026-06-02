@@ -1,0 +1,10 @@
+{
+  "name": "Coletor qrcode - Controle de Ativos",
+  "description": "Sistema moderno de gestão de ativos com leitor de código de barras integrado e integração simulada com SharePoint.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
