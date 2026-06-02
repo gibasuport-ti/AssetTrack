@@ -102,7 +102,18 @@ const App: React.FC = () => {
   // Controle do painel de segurança e conexão (Práticas de Segurança e GitHub Pages)
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [localGeminiKey, setLocalGeminiKey] = useState(() => localStorage.getItem('assettrack_gemini_api_key') || '');
-  const [storageMode, setStorageMode] = useState<'cloud' | 'local'>(() => (localStorage.getItem('assettrack_storage_mode') as 'cloud' | 'local') || 'cloud');
+  const [storageMode, setStorageMode] = useState<'cloud' | 'local'>(() => {
+    const saved = localStorage.getItem('assettrack_storage_mode');
+    if (saved === 'cloud' || saved === 'local') return saved;
+    // No GitHub Pages ou qualquer host estático externo público (exceto nosso dev server ou local),
+    // o padrão ideal é 'local' (IndexedDB) para funcionar offline, autônomo e sem depender da plataforma de origem.
+    const isGitHubPages = window.location.hostname.includes('github.io');
+    const isLocalOrRunner = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1') || window.location.hostname.includes('run.app');
+    if (isGitHubPages || !isLocalOrRunner) {
+      return 'local';
+    }
+    return 'cloud';
+  });
   const [customFirebaseConfig, setCustomFirebaseConfig] = useState(() => localStorage.getItem('assettrack_custom_firebase_config') || '');
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -331,8 +342,13 @@ const App: React.FC = () => {
     try {
       const result = await geminiService.analyzeInventory(selectedAssets);
       setAiAnalysis(result || null);
-    } catch (err) {
-      alert('Erro ao consultar a IA.');
+    } catch (err: any) {
+      console.error('Erro na análise:', err);
+      let errMsg = err?.message || 'Erro inesperado ao consultar a IA.';
+      if (window.location.hostname.includes('github.io')) {
+        errMsg += '\n\nDica: No GitHub Pages (ambiente estático), você deve inserir sua chave pessoal do Gemini (pelo ícone de Escudo Azul no topo) para que as requisições de IA funcionem diretamente do navegador.';
+      }
+      alert(errMsg);
     } finally {
       setAnalyzing(false);
     }
@@ -477,10 +493,11 @@ const App: React.FC = () => {
             </button>
             <button 
               onClick={() => setShowSecurityModal(true)}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-blue-600 hover:bg-slate-200'}`}
+              className={`h-10 rounded-xl px-3 flex items-center justify-center gap-2 border-2 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-blue-600 hover:bg-slate-200'}`}
               title="Configurações de Segurança e Conexão"
             >
               <i className="fa-solid fa-shield-halved"></i>
+              <span className="text-xs font-bold hidden sm:inline">Configurações</span>
             </button>
             <button 
               onClick={openNewForm}
@@ -493,18 +510,34 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      {window.location.hostname.includes('github.io') && (
+        <div className={`border-b-2 py-3 px-4 text-center text-xs font-bold flex flex-wrap items-center justify-center gap-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800 text-amber-400' : 'bg-amber-50 border-slate-200 text-amber-800'}`}>
+          <i className="fa-solid fa-circle-info text-amber-500 text-sm"></i>
+          <span>Você está rodando no GitHub Pages! O app foi configurado no modo <span className="underline">Local (auto-contido)</span> de forma independente do AI Studio.</span>
+          <button onClick={() => setShowSecurityModal(true)} className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm ml-1">Configurar Serviços</button>
+        </div>
+      )}
+
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className={`p-5 rounded-2xl shadow-sm border-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} flex items-center gap-4`}>
-            <div className={`p-3 rounded-xl ${storageMode === 'cloud' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
-              <i className={`fa-solid ${storageMode === 'cloud' ? 'fa-cloud' : 'fa-box-archive'} text-xl`}></i>
+          <div className={`p-5 rounded-2xl shadow-sm border-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} flex items-center justify-between gap-4`}>
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl ${storageMode === 'cloud' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                <i className={`fa-solid ${storageMode === 'cloud' ? 'fa-cloud' : 'fa-box-archive'} text-xl`}></i>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Armazenamento</p>
+                <p className={`text-sm font-black ${storageMode === 'cloud' ? 'text-green-500' : 'text-amber-500'}`}>
+                  {storageMode === 'cloud' ? 'Cloud Sync (Ativo)' : 'Modo Estático Local'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase">Armazenamento</p>
-              <p className={`text-sm font-black ${storageMode === 'cloud' ? 'text-green-500' : 'text-amber-500'}`}>
-                {storageMode === 'cloud' ? 'Cloud Sync (Ativo)' : 'Modo Estático Local'}
-              </p>
-            </div>
+            <button
+              onClick={() => setShowSecurityModal(true)}
+              className={`text-xs px-2.5 py-1.5 rounded-lg border-2 font-bold transition-all shadow-sm ${darkMode ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-blue-600 hover:bg-slate-200'}`}
+            >
+              Configurar
+            </button>
           </div>
           <div className={`p-5 rounded-2xl shadow-sm border-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} flex items-center gap-4`}>
             <div className="bg-green-500/10 p-3 rounded-xl text-green-500"><i className="fa-solid fa-database text-xl"></i></div>
@@ -936,8 +969,14 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Chave de API do Gemini (AI Studio)</label>
                 <p className="text-xs opacity-60">
-                  Insira sua chave pessoal do Gemini para rodar OCR estilo Google Lens do leitor de ativos e consultas de especificações de hardware em ambientes estáticos (GitHub Pages). Se deixado em branco, o app usará o proxy seguro do servidor se disponível.
+                  Insira sua chave pessoal do Gemini para rodar OCR estilo Google Lens do leitor de ativos e consultas de especificações de hardware. Em ambientes estáticos como o GitHub Pages, ela é obrigatória para usar as funções de Inteligência Artificial de forma independente.
                 </p>
+                <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition-colors ${darkMode ? 'bg-purple-950/20 border-purple-900/50 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-800'}`}>
+                  <span className="font-semibold"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i> Obtenha uma chave grátis:</span>
+                  <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="underline font-bold text-blue-500 hover:text-blue-600 flex items-center gap-1">
+                    Google AI Studio <i className="fa-solid fa-up-right-from-square text-[10px]"></i>
+                  </a>
+                </div>
                 <div className="relative">
                   <input 
                     type={showApiKey ? "text" : "password"}
