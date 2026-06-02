@@ -27,6 +27,24 @@ const getAI = () => {
   return aiInstance;
 };
 
+const callWithFallbackModel = async (ai: any, params: any): Promise<any> => {
+  try {
+    return await ai.models.generateContent(params);
+  } catch (error: any) {
+    const errorStr = String(error?.message || error).toLowerCase();
+    const is503OrUnavailable = errorStr.includes("503") || errorStr.includes("unavailable") || errorStr.includes("high demand") || errorStr.includes("spikes in demand");
+    
+    if (is503OrUnavailable && params.model !== "gemini-flash-latest") {
+      console.warn(`[Gemini Fallback Backend] Modelo ${params.model} indisponível/congestionado (503). Tentando fallback com gemini-flash-latest...`);
+      return await ai.models.generateContent({
+        ...params,
+        model: "gemini-flash-latest"
+      });
+    }
+    throw error;
+  }
+};
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -62,7 +80,7 @@ Além disso, para criar uma experiência interativa exatamente como o Google Len
 O 'topPercent' representa o início vertical (0=topo, 100=base), 'leftPercent' representa o início horizontal (0=esquerda, 100=direita).
 O formato do JSON de retorno deve seguir rigorosamente o esquema determinado.`;
 
-      const response = await ai.models.generateContent({
+      const response = await callWithFallbackModel(ai, {
         model: "gemini-3.5-flash",
         contents: [imagePart, prompt],
         config: {
@@ -125,7 +143,7 @@ O formato do JSON de retorno deve seguir rigorosamente o esquema determinado.`;
       const prompt = `Forneça a ficha técnica detalhada (especificações principais de hardware como CPU, RAM, Tela, etc.) para os seguintes modelos de equipamentos encontrados no inventário: ${uniqueItems.join(', ')}. 
 Organize as informações por modelo de forma clara e profissional.`;
 
-      const response = await ai.models.generateContent({
+      const response = await callWithFallbackModel(ai, {
         model: 'gemini-3.5-flash',
         contents: prompt,
         config: {
