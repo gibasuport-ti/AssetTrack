@@ -669,13 +669,23 @@ const App: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       {asset.situacao === 'Colaborador' ? (
-                        <div className="text-xs space-y-0.5">
+                        <div className="text-xs space-y-1">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-all inline-flex items-center gap-1 ${darkMode ? 'bg-blue-950/40 text-blue-400 border-blue-900' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
                             <i className="fa-solid fa-user text-[8px]"></i> Colaborador
                           </span>
-                          <div className="font-bold text-slate-800 dark:text-slate-200 mt-1 max-w-[150px] truncate" title={asset.colaboradorNome}>{asset.colaboradorNome}</div>
-                          {asset.colaboradorId && <div className="text-[10px] text-slate-500 font-medium">ID: {asset.colaboradorId}</div>}
-                          {asset.colaboradorEmail && <div className="text-[9px] text-slate-400 font-mono truncate max-w-[140px]" title={asset.colaboradorEmail}>{asset.colaboradorEmail}</div>}
+                          <div className="font-extrabold text-slate-900 dark:text-white text-xs mt-0.5 max-w-[150px] truncate" title={asset.colaboradorNome}>
+                            {asset.colaboradorNome}
+                          </div>
+                          {asset.colaboradorId && (
+                            <div className="text-[10px] text-slate-700 dark:text-slate-300 font-black">
+                              ID: {asset.colaboradorId}
+                            </div>
+                          )}
+                          {asset.colaboradorEmail && (
+                            <div className="text-[10px] text-slate-600 dark:text-slate-400 font-mono font-bold truncate max-w-[140px]" title={asset.colaboradorEmail}>
+                              {asset.colaboradorEmail}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div>
