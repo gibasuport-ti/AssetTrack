@@ -152,7 +152,11 @@ const App: React.FC = () => {
     serial: '',
     NumeroPatrimonio: '',
     EstadoEquipamento: 'BOM',
-    observacao: ''
+    observacao: '',
+    situacao: 'Estoque',
+    colaboradorId: '',
+    colaboradorNome: '',
+    colaboradorEmail: ''
   });
 
   const [formData, setFormData] = useState<AssetFormData>(getInitialForm());
@@ -226,7 +230,11 @@ const App: React.FC = () => {
       asset.NumeroPatrimonio.toLowerCase().includes(term) ||
       asset.TipoEquipamento.toLowerCase().includes(term) ||
       asset.EstadoEquipamento.toLowerCase().includes(term) ||
-      asset.observacao.toLowerCase().includes(term)
+      asset.observacao.toLowerCase().includes(term) ||
+      (asset.situacao && asset.situacao.toLowerCase().includes(term)) ||
+      (asset.colaboradorNome && asset.colaboradorNome.toLowerCase().includes(term)) ||
+      (asset.colaboradorId && asset.colaboradorId.toLowerCase().includes(term)) ||
+      (asset.colaboradorEmail && asset.colaboradorEmail.toLowerCase().includes(term))
     );
   }, [assets, searchTerm]);
 
@@ -277,7 +285,10 @@ const App: React.FC = () => {
           ...prev,
           serial: '',
           NumeroPatrimonio: '',
-          observacao: '' 
+          observacao: '',
+          colaboradorId: '',
+          colaboradorNome: '',
+          colaboradorEmail: ''
         }));
         
         setTimeout(() => {
@@ -315,7 +326,11 @@ const App: React.FC = () => {
       serial: asset.serial,
       NumeroPatrimonio: asset.NumeroPatrimonio,
       EstadoEquipamento: asset.EstadoEquipamento || 'BOM',
-      observacao: asset.observacao || ''
+      observacao: asset.observacao || '',
+      situacao: asset.situacao || 'Estoque',
+      colaboradorId: asset.colaboradorId || '',
+      colaboradorNome: asset.colaboradorNome || '',
+      colaboradorEmail: asset.colaboradorEmail || ''
     });
     setShowForm(true);
   };
@@ -370,6 +385,10 @@ const App: React.FC = () => {
       'Modelo': a.modelo,
       'Serial': a.serial,
       'Estado': a.EstadoEquipamento,
+      'Situação': a.situacao || 'Estoque',
+      'ID Colaborador': a.colaboradorId || '',
+      'Nome Colaborador': a.colaboradorNome || '',
+      'E-mail Colaborador': a.colaboradorEmail || '',
       'Observação': a.observacao,
       'Data': a.DataAquisicao
     })));
@@ -399,6 +418,10 @@ const App: React.FC = () => {
             modelo: String(row['Modelo'] || row['modelo'] || ''),
             serial: String(row['Serial'] || row['serial'] || ''),
             EstadoEquipamento: String(row['Estado'] || row['EstadoEquipamento'] || 'BOM'),
+            situacao: String(row['Situação'] || row['situacao'] || 'Estoque') as any,
+            colaboradorId: String(row['ID Colaborador'] || row['colaboradorId'] || ''),
+            colaboradorNome: String(row['Nome Colaborador'] || row['colaboradorNome'] || ''),
+            colaboradorEmail: String(row['E-mail Colaborador'] || row['colaboradorEmail'] || ''),
             observacao: String(row['Observação'] || row['observacao'] || ''),
             DataAquisicao: String(row['Data'] || row['DataAquisicao'] || getBrasiliaDateString()),
             id: row['id'] ? String(row['id']) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36),
@@ -610,6 +633,7 @@ const App: React.FC = () => {
                   <th className="px-6 py-4">Marca/Modelo</th>
                   <th className="px-6 py-4">Patrimônio</th>
                   <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Situação / Responsável</th>
                   <th className="px-6 py-4">Serial</th>
                   <th className="px-6 py-4 text-right">Gerenciar</th>
                 </tr>
@@ -642,6 +666,24 @@ const App: React.FC = () => {
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-colors ${getStatusBadgeClass(asset.EstadoEquipamento)}`}>
                         {asset.EstadoEquipamento}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {asset.situacao === 'Colaborador' ? (
+                        <div className="text-xs space-y-0.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-all inline-flex items-center gap-1 ${darkMode ? 'bg-blue-950/40 text-blue-400 border-blue-900' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                            <i className="fa-solid fa-user text-[8px]"></i> Colaborador
+                          </span>
+                          <div className="font-bold text-slate-800 dark:text-slate-200 mt-1 max-w-[150px] truncate" title={asset.colaboradorNome}>{asset.colaboradorNome}</div>
+                          {asset.colaboradorId && <div className="text-[10px] text-slate-500 font-medium">ID: {asset.colaboradorId}</div>}
+                          {asset.colaboradorEmail && <div className="text-[9px] text-slate-400 font-mono truncate max-w-[140px]" title={asset.colaboradorEmail}>{asset.colaboradorEmail}</div>}
+                        </div>
+                      ) : (
+                        <div>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-all inline-flex items-center gap-1 ${darkMode ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/60' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            <i className="fa-solid fa-box text-[8px]"></i> Estoque
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm font-mono text-blue-500 font-bold">{asset.serial}</td>
                     <td className="px-6 py-4 text-right">
@@ -867,6 +909,62 @@ const App: React.FC = () => {
                   >
                     {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
                   </select>
+                </div>
+
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5 p-4 rounded-xl border-2 transition-all bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-800">
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-black mb-1.5 uppercase tracking-wider text-blue-500 flex items-center gap-1">
+                      <i className="fa-solid fa-location-dot text-blue-500"></i> Localização / Destinação
+                    </label>
+                    <select 
+                      value={formData.situacao || 'Estoque'} 
+                      onChange={e => setFormData({...formData, situacao: e.target.value as 'Estoque' | 'Colaborador'})} 
+                      className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                    >
+                      <option value="Estoque">📦 Em Estoque</option>
+                      <option value="Colaborador">👤 Com Colaborador</option>
+                    </select>
+                  </div>
+
+                  {formData.situacao === 'Colaborador' && (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">ID do Colaborador</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: 50403..." 
+                          value={formData.colaboradorId || ''} 
+                          onChange={e => setFormData({...formData, colaboradorId: e.target.value})} 
+                          className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">Nome Completo</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Nome do Funcionário..." 
+                          value={formData.colaboradorNome || ''} 
+                          onChange={e => setFormData({...formData, colaboradorNome: e.target.value})} 
+                          className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                          required
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">E-mail Corporativo</label>
+                        <input 
+                          type="email" 
+                          placeholder="email@empresa.com" 
+                          value={formData.colaboradorEmail || ''} 
+                          onChange={e => setFormData({...formData, colaboradorEmail: e.target.value})} 
+                          className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">

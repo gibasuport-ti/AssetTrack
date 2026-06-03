@@ -12,6 +12,10 @@ export interface Asset {
   createdAt: string;
   updatedAt?: string;
   uid?: string;
+  situacao?: 'Estoque' | 'Colaborador';
+  colaboradorId?: string;
+  colaboradorNome?: string;
+  colaboradorEmail?: string;
 }
 
 export type AssetFormData = Omit<Asset, 'id' | 'createdAt'>;
