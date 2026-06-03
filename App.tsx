@@ -510,14 +510,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {window.location.hostname.includes('github.io') && (
-        <div className={`border-b-2 py-3 px-4 text-center text-xs font-bold flex flex-wrap items-center justify-center gap-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800 text-amber-400' : 'bg-amber-50 border-slate-200 text-amber-800'}`}>
-          <i className="fa-solid fa-circle-info text-amber-500 text-sm"></i>
-          <span>Você está rodando no GitHub Pages! O app foi configurado no modo <span className="underline">Local (auto-contido)</span> de forma independente do AI Studio.</span>
-          <button onClick={() => setShowSecurityModal(true)} className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg text-[10px] uppercase font-black tracking-wider transition-colors shadow-sm ml-1">Configurar Serviços</button>
-        </div>
-      )}
-
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className={`p-5 rounded-2xl shadow-sm border-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} flex items-center justify-between gap-4`}>
