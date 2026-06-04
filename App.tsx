@@ -77,9 +77,20 @@ const getBrasiliaDateString = () => {
   return formatter.format(now);
 };
 
+const getEquipmentIcon = (type: string) => {
+  const t = String(type || '').toUpperCase();
+  if (t.includes('NOTEBOOK') || t.includes('LAPTOP')) return 'fa-laptop';
+  if (t.includes('SMARTPHONE') || t.includes('CELULAR') || t.includes('PHONE')) return 'fa-mobile-screen-button';
+  if (t.includes('DESKTOP') || t.includes('PC') || t.includes('COMPUTADOR') || t.includes('DESKTOP PC')) return 'fa-desktop';
+  if (t.includes('TABLET')) return 'fa-tablet-screen-button';
+  if (t.includes('MONITOR') || t.includes('TELA')) return 'fa-display';
+  return 'fa-box';
+};
+
 const App: React.FC = () => {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [showScanner, setShowScanner] = useState(false);
@@ -98,6 +109,23 @@ const App: React.FC = () => {
   const [isCustomType, setIsCustomType] = useState(false);
   const [isCustomBrand, setIsCustomBrand] = useState(false);
   const [isCustomModel, setIsCustomModel] = useState(false);
+
+  // Calcula tipos customizados existentes nos registros salvos
+  const customEquipmentTypes = useMemo(() => {
+    const types = new Set<string>();
+    assets.forEach(asset => {
+      if (asset.TipoEquipamento) {
+        types.add(asset.TipoEquipamento.toUpperCase());
+      }
+    });
+    const standardTypes = (Object.values(EquipmentType) as string[]).map(t => t.toUpperCase());
+    return Array.from(types)
+      .filter(t => !standardTypes.includes(t) && t.trim() !== '')
+      .map(t => {
+        const original = assets.find(a => a.TipoEquipamento && a.TipoEquipamento.toUpperCase() === t)?.TipoEquipamento;
+        return original || t;
+      });
+  }, [assets]);
 
   // Controle do painel de segurança e conexão (Práticas de Segurança e GitHub Pages)
   const [showSecurityModal, setShowSecurityModal] = useState(false);
@@ -221,9 +249,13 @@ const App: React.FC = () => {
   }, [fetchAssets]);
 
   const filteredAssets = useMemo(() => {
-    if (!searchTerm) return assets;
+    let result = assets;
+    if (typeFilter) {
+      result = result.filter(asset => asset.TipoEquipamento === typeFilter);
+    }
+    if (!searchTerm) return result;
     const term = searchTerm.toLowerCase();
-    return assets.filter(asset => 
+    return result.filter(asset => 
       asset.modelo.toLowerCase().includes(term) ||
       asset.marca.toLowerCase().includes(term) ||
       asset.serial.toLowerCase().includes(term) ||
@@ -236,7 +268,10 @@ const App: React.FC = () => {
       (asset.colaboradorId && asset.colaboradorId.toLowerCase().includes(term)) ||
       (asset.colaboradorEmail && asset.colaboradorEmail.toLowerCase().includes(term))
     );
-  }, [assets, searchTerm]);
+  }, [assets, searchTerm, typeFilter]);
+
+  // Conta a quantidade de ativos baseada nos filtros aplicados (inclusive busca)
+  const selectedTypeCount = filteredAssets.length;
 
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredAssets.length && filteredAssets.length > 0) {
@@ -278,6 +313,9 @@ const App: React.FC = () => {
         await assetService.updateAsset(editingAsset.id, formData);
         setShowForm(false);
         setEditingAsset(null);
+        setIsCustomType(false);
+        setIsCustomBrand(false);
+        setIsCustomModel(false);
       } else {
         await assetService.addAsset(formData);
         
@@ -297,9 +335,6 @@ const App: React.FC = () => {
       }
       
       fetchAssets();
-      setIsCustomType(false);
-      setIsCustomBrand(false);
-      setIsCustomModel(false);
     } catch (err) {
       alert('Erro ao salvar as informações localmente.');
     } finally {
@@ -309,7 +344,7 @@ const App: React.FC = () => {
 
   const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
-    const standardTypes = Object.values(EquipmentType) as string[];
+    const standardTypes = (Object.values(EquipmentType) as string[]).filter(t => t !== EquipmentType.OUTRO);
     const customT = !!(asset.TipoEquipamento && !standardTypes.includes(asset.TipoEquipamento));
     const customB = !!(asset.marca && !BRANDS.includes(asset.marca.toUpperCase()));
     const customM = !!(asset.modelo && !MODELS.includes(asset.modelo.toUpperCase()));
@@ -592,18 +627,55 @@ const App: React.FC = () => {
 
         <section className={`rounded-2xl shadow-sm border-2 overflow-hidden transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className={`p-4 sm:p-6 border-b-2 transition-colors ${darkMode ? 'bg-slate-800 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="flex flex-col lg:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-3 w-full lg:w-auto">
-                <h3 className="font-black text-lg">Inventário</h3>
-                <div className="relative w-full max-sm:max-w-none max-w-sm">
-                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                  <input 
-                    type="text" 
-                    placeholder="Filtrar registros..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className={`w-full border-2 rounded-xl py-2 pl-10 pr-4 text-sm outline-none transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-500'}`}
-                  />
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                <h3 className="font-black text-lg whitespace-nowrap">Inventário</h3>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+                  <div className="relative w-full sm:w-64">
+                    <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input 
+                      type="text" 
+                      placeholder="Filtrar registros..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className={`w-full border-2 rounded-xl py-2 pl-10 pr-4 text-xs font-bold outline-none transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-500'}`}
+                    />
+                  </div>
+                  <div className="relative w-full sm:w-56">
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                      className={`w-full border-2 rounded-xl py-2 px-3 text-xs font-bold outline-none transition-all cursor-pointer ${darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-500'}`}
+                    >
+                      <option value="">TODOS OS TIPOS ({assets.length})</option>
+                      {Object.values(EquipmentType).filter(t => t !== EquipmentType.OUTRO).map(type => {
+                        const count = assets.filter(a => a.TipoEquipamento === type).length;
+                        return (
+                          <option key={type} value={type}>
+                            {type} ({count})
+                          </option>
+                        );
+                      })}
+                      {customEquipmentTypes.map(type => {
+                        const count = assets.filter(a => a.TipoEquipamento === type).length;
+                        return (
+                          <option key={type} value={type}>
+                            {type} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                  <div className={`flex items-center gap-1.5 px-3 py-2 border-2 rounded-xl text-xs font-black transition-all justify-center whitespace-nowrap self-stretch sm:self-auto ${
+                    darkMode 
+                      ? 'bg-blue-950/40 border-blue-900 text-blue-400' 
+                      : 'bg-blue-50 border-blue-100 text-blue-700'
+                  }`} title="Quantidade de equipamentos deste tipo">
+                    <i className="fa-solid fa-calculator text-[10px]"></i>
+                    <span>
+                      {selectedTypeCount} {selectedTypeCount === 1 ? 'item' : 'itens'}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -629,7 +701,7 @@ const App: React.FC = () => {
                       />
                     </div>
                   </th>
-                  <th className="px-6 py-4">Equipamento</th>
+                  <th className="px-6 py-4">Tipo de Equipamento</th>
                   <th className="px-6 py-4">Marca/Modelo</th>
                   <th className="px-6 py-4">Patrimônio</th>
                   <th className="px-6 py-4">Estado</th>
@@ -655,7 +727,14 @@ const App: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${darkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>{asset.TipoEquipamento}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`p-1 w-6 h-6 flex items-center justify-center rounded-lg text-xs font-black ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                          <i className={`fa-solid ${getEquipmentIcon(asset.TipoEquipamento)}`}></i>
+                        </span>
+                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${darkMode ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                          {asset.TipoEquipamento}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm font-bold">{asset.marca}</div>
@@ -751,6 +830,9 @@ const App: React.FC = () => {
                       required
                     >
                       {Object.values(EquipmentType).filter(t => t !== EquipmentType.OUTRO).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                      {customEquipmentTypes.map(type => (
                         <option key={type} value={type}>{type}</option>
                       ))}
                       <option value="__CUSTOM__">OUTRO...</option>
