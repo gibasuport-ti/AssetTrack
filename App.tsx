@@ -100,6 +100,9 @@ const App: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [editingIdPasswordCheck, setEditingIdPasswordCheck] = useState<string | null>(null);
+  const [editPasswordInput, setEditPasswordInput] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -678,9 +681,9 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={exportToExcel} className="p-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center gap-2"><i className="fa-solid fa-file-excel"></i> Exportar</button>
-                <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 border-2 rounded-lg text-xs font-bold flex items-center gap-2 ${darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}><i className="fa-solid fa-file-import"></i> Importar</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={exportToExcel} className="p-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center gap-2 cursor-pointer"><i className="fa-solid fa-file-excel"></i> Exportar</button>
+                <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 border-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer ${darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}><i className="fa-solid fa-file-import"></i> Importar</button>
                 <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.xlsx,.xls" />
               </div>
             </div>
@@ -690,7 +693,7 @@ const App: React.FC = () => {
             <table className="w-full text-left">
               <thead className={`text-[11px] uppercase font-black border-b-2 transition-colors ${darkMode ? 'bg-slate-800/50 text-slate-500 border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                 <tr>
-                  <th className="px-6 py-4 w-10">
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5 w-10">
                     <div className="flex items-center justify-center">
                       <input 
                         type="checkbox" 
@@ -701,21 +704,21 @@ const App: React.FC = () => {
                       />
                     </div>
                   </th>
-                  <th className="px-6 py-4">Tipo de Equipamento</th>
-                  <th className="px-6 py-4">Marca/Modelo</th>
-                  <th className="px-6 py-4">Patrimônio</th>
-                  <th className="px-6 py-4">Estado</th>
-                  <th className="px-6 py-4">Situação / Responsável</th>
-                  <th className="px-6 py-4">Serial</th>
-                  <th className="px-6 py-4 text-right">Gerenciar</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Tipo de Equipamento</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Marca/Modelo</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Patrimônio</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Estado</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Situação / Responsável</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5">Serial</th>
+                  <th className="px-3 sm:px-4 md:px-6 py-3.5 text-right">Gerenciar</th>
                 </tr>
               </thead>
               <tbody className={`divide-y-2 transition-colors ${darkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
                 {loading ? (
-                  <tr><td colSpan={7} className="py-20 text-center"><div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div></td></tr>
+                  <tr><td colSpan={8} className="py-20 text-center"><div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div></td></tr>
                 ) : filteredAssets.map(asset => (
                   <tr key={asset.id} className={`transition-colors ${darkMode ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'} ${selectedIds.has(asset.id) ? (darkMode ? 'bg-blue-900/10' : 'bg-blue-50') : ''}`}>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-4 md:px-6 py-3">
                       <div className="flex items-center justify-center">
                         <input 
                           type="checkbox" 
@@ -726,7 +729,7 @@ const App: React.FC = () => {
                         />
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-4 md:px-6 py-3">
                       <div className="flex items-center gap-2">
                         <span className={`p-1 w-6 h-6 flex items-center justify-center rounded-lg text-xs font-black ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
                           <i className={`fa-solid ${getEquipmentIcon(asset.TipoEquipamento)}`}></i>
@@ -736,17 +739,17 @@ const App: React.FC = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-4 md:px-6 py-3">
                       <div className="text-sm font-bold">{asset.marca}</div>
                       <div className="text-[10px] opacity-60 font-medium">{asset.modelo}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm font-mono font-bold">{asset.NumeroPatrimonio}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-4 md:px-6 py-3 text-sm font-mono font-bold">{asset.NumeroPatrimonio}</td>
+                    <td className="px-3 sm:px-4 md:px-6 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-colors ${getStatusBadgeClass(asset.EstadoEquipamento)}`}>
                         {asset.EstadoEquipamento}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 sm:px-4 md:px-6 py-3">
                       {asset.situacao === 'Colaborador' ? (
                         <div className="text-xs space-y-1">
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-all inline-flex items-center gap-1 ${darkMode ? 'bg-blue-950/40 text-blue-400 border-blue-900' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
@@ -774,17 +777,122 @@ const App: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm font-mono text-blue-500 font-bold">{asset.serial}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 sm:px-4 md:px-6 py-3 text-sm font-mono text-blue-500 font-bold">{asset.serial}</td>
+                    <td className="px-3 sm:px-4 md:px-6 py-3 text-right">
                       {deletingId === asset.id ? (
-                        <div className="flex items-center justify-end gap-2 animate-in slide-in-from-right-2 duration-200">
-                           <button onClick={() => confirmDelete(asset.id)} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm">Confirmar</button>
-                           <button onClick={() => setDeletingId(null)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border-2 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>Sair</button>
+                        <div className="flex flex-col sm:flex-row items-center justify-end gap-2 animate-in slide-in-from-right-2 duration-200">
+                          <input 
+                            type="password" 
+                            placeholder="Senha" 
+                            value={deletePassword} 
+                            onChange={(e) => setDeletePassword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                if (deletePassword === 'excluiritem') {
+                                  confirmDelete(asset.id);
+                                  setDeletePassword('');
+                                } else {
+                                  alert('Senha incorreta!');
+                                }
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs border rounded-lg outline-none w-32 md:w-36 text-center font-bold transition-all shrink-0 ${
+                              darkMode 
+                                ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-red-500' 
+                                : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-red-500'
+                            }`}
+                          />
+                          <button 
+                            onClick={() => {
+                              if (deletePassword === 'excluiritem') {
+                                confirmDelete(asset.id);
+                                setDeletePassword('');
+                              } else {
+                                alert('Senha incorreta!');
+                              }
+                            }} 
+                            className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm cursor-pointer whitespace-nowrap shrink-0 hover:bg-red-700 transition-colors"
+                          >
+                            Confirmar
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setDeletingId(null);
+                              setDeletePassword('');
+                            }} 
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border-2 cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                              darkMode 
+                                ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white' 
+                                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            Sair
+                          </button>
+                        </div>
+                      ) : editingIdPasswordCheck === asset.id ? (
+                        <div className="flex flex-col sm:flex-row items-center justify-end gap-2 animate-in slide-in-from-right-2 duration-200">
+                          <input 
+                            type="password" 
+                            placeholder="Senha para editar" 
+                            value={editPasswordInput} 
+                            onChange={(e) => setEditPasswordInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                if (editPasswordInput === 'editaritem') {
+                                  handleEdit(asset);
+                                  setEditingIdPasswordCheck(null);
+                                  setEditPasswordInput('');
+                                } else {
+                                  alert('Senha incorreta!');
+                                }
+                              }
+                            }}
+                            className={`px-2 py-1 text-xs border rounded-lg outline-none w-32 md:w-36 text-center font-bold transition-all shrink-0 ${
+                              darkMode 
+                                ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500' 
+                                : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-blue-500'
+                            }`}
+                          />
+                          <button 
+                            onClick={() => {
+                              if (editPasswordInput === 'editaritem') {
+                                handleEdit(asset);
+                                setEditingIdPasswordCheck(null);
+                                setEditPasswordInput('');
+                              } else {
+                                alert('Senha incorreta!');
+                              }
+                            }} 
+                            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm cursor-pointer whitespace-nowrap shrink-0 hover:bg-blue-700 transition-colors"
+                          >
+                            Editar
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingIdPasswordCheck(null);
+                              setEditPasswordInput('');
+                            }} 
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border-2 cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                              darkMode 
+                                ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white' 
+                                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            Sair
+                          </button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-end gap-3">
-                          <button onClick={() => handleEdit(asset)} className="p-2 text-slate-400 hover:text-blue-500 transition-colors" title="Editar"><i className="fa-solid fa-pencil"></i></button>
-                          <button onClick={() => setDeletingId(asset.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Excluir"><i className="fa-solid fa-trash"></i></button>
+                          <button onClick={() => {
+                            setEditingIdPasswordCheck(asset.id);
+                            setEditPasswordInput('');
+                            setDeletingId(null);
+                          }} className="p-2 text-slate-400 hover:text-blue-500 transition-colors cursor-pointer" title="Editar"><i className="fa-solid fa-pencil"></i></button>
+                          <button onClick={() => {
+                            setDeletingId(asset.id);
+                            setDeletePassword('');
+                            setEditingIdPasswordCheck(null);
+                          }} className="p-2 text-slate-400 hover:text-red-500 transition-colors cursor-pointer" title="Excluir"><i className="fa-solid fa-trash"></i></button>
                         </div>
                       )}
                     </td>
