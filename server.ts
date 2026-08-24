@@ -49,28 +49,46 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Increase payload limit to handle base64 images
+  // Security Headers Middleware
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
+
+  // Strict payload limits
   app.use(express.json({ limit: "15mb" }));
 
   // API Route - Google Lens OCR
   app.post("/api/gemini/ocr", async (req, res) => {
     try {
       const { image, mimeType = "image/jpeg" } = req.body;
-      if (!image) {
-        return res.status(400).json({ error: "Parâmetro 'image' (base64) é obrigatório." });
+      if (!image || typeof image !== "string") {
+        return res.status(400).json({ error: "Parâmetro 'image' (base64 string) é obrigatório." });
       }
+
+      // Security check: Limit base64 input length (~15MB max)
+      if (image.length > 20 * 1024 * 1024) {
+        return res.status(413).json({ error: "Imagem muito grande. Limite máximo de 15MB excedido." });
+      }
+
+      // Validate allowed mime types
+      const allowedMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/bmp"];
+      const cleanMime = allowedMimes.includes(mimeType?.toLowerCase()) ? mimeType.toLowerCase() : "image/jpeg";
 
       // Cleanup base64 string if it contains prefix
       let pureBase64 = image;
       if (image.includes(";base64,")) {
-        pureBase64 = image.split(";base64,").pop();
+        pureBase64 = image.split(";base64,").pop() || image;
       }
 
       const ai = getAI();
 
       const imagePart = {
         inlineData: {
-          mimeType: mimeType,
+          mimeType: cleanMime,
           data: pureBase64,
         },
       };
@@ -133,8 +151,16 @@ O formato do JSON de retorno deve seguir rigorosamente o esquema determinado.`;
         return res.status(400).json({ error: "Parâmetro 'assets' é obrigatório e deve ser um array." });
       }
 
+      // Security check: Limit max number of items analyzed in a single request to prevent token/memory exhaustion
+      const MAX_ASSETS = 200;
+      const boundedAssets = assets.slice(0, MAX_ASSETS);
+
       const ai = getAI();
-      const uniqueItems = Array.from(new Set(assets.map(a => `${a.marca || ""} ${a.modelo || ""}`.trim()).filter(Boolean)));
+      const uniqueItems = Array.from(new Set(
+        boundedAssets
+          .map(a => `${String(a?.marca || "").slice(0, 50)} ${String(a?.modelo || "").slice(0, 50)}`.trim())
+          .filter(Boolean)
+      )).slice(0, 50); // Max 50 distinct models for hardware specs lookup
       
       if (uniqueItems.length === 0) {
         return res.json({ result: "Nenhum equipamento para analisar." });

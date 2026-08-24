@@ -33,11 +33,11 @@ jobs:
           cache: npm
 
       - name: Instalar Dependências
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Compilar Aplicação (Vite)
         run: |
-          npm run build
+          npm run build:client
           touch ./dist/.nojekyll
           cp ./dist/index.html ./dist/404.html
 

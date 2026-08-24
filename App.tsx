@@ -581,21 +581,31 @@ const App: React.FC = () => {
     setTimeout(() => serialInputRef.current?.focus(), 100);
   };
 
+  // Proteção contra Injeção de Fórmulas em Planilhas (CSV / Excel Formula Injection / DDE Injection)
+  const sanitizeSpreadsheetCell = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    const str = String(val).trim();
+    if (/^[=+\-@\t\r]/.test(str)) {
+      return `'${str}`;
+    }
+    return str;
+  };
+
   const exportToExcel = () => {
     if (filteredAssets.length === 0) return alert('Sem dados para exportar.');
     const worksheet = XLSX.utils.json_to_sheet(filteredAssets.map(a => ({
-      'Patrimônio': a.NumeroPatrimonio,
-      'Equipamento': a.TipoEquipamento,
-      'Marca': a.marca,
-      'Modelo': a.modelo,
-      'Serial': a.serial,
-      'Estado': a.EstadoEquipamento,
-      'Situação': a.situacao || 'Estoque',
-      'ID Colaborador': a.colaboradorId || '',
-      'Nome Colaborador': a.colaboradorNome || '',
-      'E-mail Colaborador': a.colaboradorEmail || '',
-      'Observação': a.observacao,
-      'Data': a.DataAquisicao
+      'Patrimônio': sanitizeSpreadsheetCell(a.NumeroPatrimonio),
+      'Equipamento': sanitizeSpreadsheetCell(a.TipoEquipamento),
+      'Marca': sanitizeSpreadsheetCell(a.marca),
+      'Modelo': sanitizeSpreadsheetCell(a.modelo),
+      'Serial': sanitizeSpreadsheetCell(a.serial),
+      'Estado': sanitizeSpreadsheetCell(a.EstadoEquipamento),
+      'Situação': sanitizeSpreadsheetCell(a.situacao || 'Estoque'),
+      'ID Colaborador': sanitizeSpreadsheetCell(a.colaboradorId || ''),
+      'Nome Colaborador': sanitizeSpreadsheetCell(a.colaboradorNome || ''),
+      'E-mail Colaborador': sanitizeSpreadsheetCell(a.colaboradorEmail || ''),
+      'Observação': sanitizeSpreadsheetCell(a.observacao),
+      'Data': sanitizeSpreadsheetCell(a.DataAquisicao)
     })));
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventário");
@@ -616,25 +626,43 @@ const App: React.FC = () => {
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           const json = XLSX.utils.sheet_to_json(worksheet);
-          dataToImport = json.map((row: any) => ({
-            NumeroPatrimonio: String(row['Patrimônio'] || row['NumeroPatrimonio'] || ''),
-            TipoEquipamento: String(row['Equipamento'] || row['TipoEquipamento'] || 'NOTEBOOK'),
-            marca: String(row['Marca'] || row['marca'] || ''),
-            modelo: String(row['Modelo'] || row['modelo'] || ''),
-            serial: String(row['Serial'] || row['serial'] || ''),
-            EstadoEquipamento: String(row['Estado'] || row['EstadoEquipamento'] || 'BOM'),
-            situacao: String(row['Situação'] || row['situacao'] || 'Estoque') as any,
-            colaboradorId: String(row['ID Colaborador'] || row['colaboradorId'] || ''),
-            colaboradorNome: String(row['Nome Colaborador'] || row['colaboradorNome'] || ''),
-            colaboradorEmail: String(row['E-mail Colaborador'] || row['colaboradorEmail'] || ''),
-            observacao: String(row['Observação'] || row['observacao'] || ''),
-            DataAquisicao: String(row['Data'] || row['DataAquisicao'] || getBrasiliaDateString()),
-            id: row['id'] ? String(row['id']) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36),
-            createdAt: row['createdAt'] ? String(row['createdAt']) : new Date().toISOString()
+          dataToImport = json.slice(0, 2000).map((row: any) => ({
+            NumeroPatrimonio: String(row['Patrimônio'] || row['NumeroPatrimonio'] || '').trim().slice(0, 100),
+            TipoEquipamento: String(row['Equipamento'] || row['TipoEquipamento'] || 'NOTEBOOK').trim().slice(0, 100),
+            marca: String(row['Marca'] || row['marca'] || '').trim().slice(0, 100),
+            modelo: String(row['Modelo'] || row['modelo'] || '').trim().slice(0, 150),
+            serial: String(row['Serial'] || row['serial'] || '').trim().slice(0, 100),
+            EstadoEquipamento: String(row['Estado'] || row['EstadoEquipamento'] || 'BOM').trim().slice(0, 100),
+            situacao: String(row['Situação'] || row['situacao'] || 'Estoque').trim().slice(0, 100) as any,
+            colaboradorId: String(row['ID Colaborador'] || row['colaboradorId'] || '').trim().slice(0, 100),
+            colaboradorNome: String(row['Nome Colaborador'] || row['colaboradorNome'] || '').trim().slice(0, 150),
+            colaboradorEmail: String(row['E-mail Colaborador'] || row['colaboradorEmail'] || '').trim().slice(0, 150),
+            observacao: String(row['Observação'] || row['observacao'] || '').trim().slice(0, 2000),
+            DataAquisicao: String(row['Data'] || row['DataAquisicao'] || getBrasiliaDateString()).trim().slice(0, 50),
+            id: (row['id'] ? String(row['id']) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36)).slice(0, 128),
+            createdAt: row['createdAt'] ? String(row['createdAt']).slice(0, 50) : new Date().toISOString()
           }));
         } else {
           const content = ev.target?.result as string;
-          dataToImport = JSON.parse(content);
+          const raw = JSON.parse(content);
+          if (Array.isArray(raw)) {
+            dataToImport = raw.slice(0, 2000).map((row: any) => ({
+              NumeroPatrimonio: String(row.NumeroPatrimonio || '').trim().slice(0, 100),
+              TipoEquipamento: String(row.TipoEquipamento || 'NOTEBOOK').trim().slice(0, 100),
+              marca: String(row.marca || '').trim().slice(0, 100),
+              modelo: String(row.modelo || '').trim().slice(0, 150),
+              serial: String(row.serial || '').trim().slice(0, 100),
+              EstadoEquipamento: String(row.EstadoEquipamento || 'BOM').trim().slice(0, 100),
+              situacao: String(row.situacao || 'Estoque').trim().slice(0, 100) as any,
+              colaboradorId: String(row.colaboradorId || '').trim().slice(0, 100),
+              colaboradorNome: String(row.colaboradorNome || '').trim().slice(0, 150),
+              colaboradorEmail: String(row.colaboradorEmail || '').trim().slice(0, 150),
+              observacao: String(row.observacao || '').trim().slice(0, 2000),
+              DataAquisicao: String(row.DataAquisicao || getBrasiliaDateString()).trim().slice(0, 50),
+              id: (row.id ? String(row.id) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36)).slice(0, 128),
+              createdAt: row.createdAt ? String(row.createdAt).slice(0, 50) : new Date().toISOString()
+            }));
+          }
         }
         const success = await assetService.importLocalData(JSON.stringify(dataToImport));
         if (success) {

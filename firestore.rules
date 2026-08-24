@@ -3,35 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default deny-all. Specific matches below will override this.
+    // Default deny-all catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: assets
-    // Document ID: auto-generated or custom string
-    // Fields:
-    //   - id: string (required)
-    //   - DataAquisicao: string (required)
-    //   - TipoEquipamento: string (required)
-    //   - marca: string (required)
-    //   - modelo: string (required)
-    //   - serial: string (required)
-    //   - NumeroPatrimonio: string (required)
-    //   - EstadoEquipamento: string (required)
-    //   - observacao: string (optional)
-    //   - createdAt: string (required, ISO 8601)
-    //   - updatedAt: string (optional, ISO 8601)
-    //   - uid: string (optional, owner ID)
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Helper Functions
+    // Helper Functions & Security Guards
     // ===============================================================
     
     function isAuthenticated() {
@@ -44,35 +22,49 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-         (request.auth.token.email == "gibasuporte@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "gibasuporte@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function isValidAsset(data) {
       return data.keys().hasAll(['NumeroPatrimonio', 'serial', 'marca', 'modelo', 'TipoEquipamento', 'EstadoEquipamento', 'DataAquisicao']) &&
-             data.NumeroPatrimonio is string && data.NumeroPatrimonio.size() > 0 &&
-             data.serial is string && data.serial.size() > 0 &&
-             data.marca is string && data.marca.size() > 0 &&
-             data.modelo is string && data.modelo.size() > 0 &&
-             data.TipoEquipamento is string && data.TipoEquipamento.size() > 0 &&
-             data.EstadoEquipamento is string && data.EstadoEquipamento.size() > 0 &&
-             data.DataAquisicao is string && data.DataAquisicao.size() > 0;
+             data.NumeroPatrimonio is string && data.NumeroPatrimonio.size() > 0 && data.NumeroPatrimonio.size() <= 100 &&
+             data.serial is string && data.serial.size() > 0 && data.serial.size() <= 100 &&
+             data.marca is string && data.marca.size() > 0 && data.marca.size() <= 100 &&
+             data.modelo is string && data.modelo.size() > 0 && data.modelo.size() <= 150 &&
+             data.TipoEquipamento is string && data.TipoEquipamento.size() > 0 && data.TipoEquipamento.size() <= 100 &&
+             data.EstadoEquipamento is string && data.EstadoEquipamento.size() > 0 && data.EstadoEquipamento.size() <= 100 &&
+             data.DataAquisicao is string && data.DataAquisicao.size() > 0 && data.DataAquisicao.size() <= 50 &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('observacao' in data) || (data.observacao is string && data.observacao.size() <= 2000)) &&
+             (!('situacao' in data) || (data.situacao is string && data.situacao.size() <= 100)) &&
+             (!('colaboradorId' in data) || (data.colaboradorId is string && data.colaboradorId.size() <= 100)) &&
+             (!('colaboradorNome' in data) || (data.colaboradorNome is string && data.colaboradorNome.size() <= 150)) &&
+             (!('colaboradorEmail' in data) || (data.colaboradorEmail is string && data.colaboradorEmail.size() <= 150)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+             (!('uid' in data) || (data.uid is string && data.uid.size() <= 128));
     }
 
     // ===============================================================
-    // Rules
+    // Collection Rules
     // ===============================================================
 
     match /assets/{assetId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidAsset(request.resource.data);
-      allow update: if isAuthenticated() && isValidAsset(request.resource.data);
-      allow delete: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidId(assetId) && isValidAsset(request.resource.data);
+      allow update: if isAuthenticated() && isValidId(assetId) && isValidAsset(request.resource.data);
+      allow delete: if isAuthenticated() && isValidId(assetId);
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if isOwner(userId) || isAdmin();
+      allow read: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow write: if isValidId(userId) && (isOwner(userId) || isAdmin());
     }
   }
 }

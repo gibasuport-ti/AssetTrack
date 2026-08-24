@@ -2,21 +2,25 @@
   "entities": {
     "Asset": {
       "title": "Asset",
-      "description": "An asset tracked in the system",
+      "description": "An asset tracked in the inventory system",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "DataAquisicao": { "type": "string" },
-        "TipoEquipamento": { "type": "string" },
-        "marca": { "type": "string" },
-        "modelo": { "type": "string" },
-        "serial": { "type": "string" },
-        "NumeroPatrimonio": { "type": "string" },
-        "EstadoEquipamento": { "type": "string" },
-        "observacao": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" },
-        "uid": { "type": "string" }
+        "id": { "type": "string", "maxLength": 128 },
+        "DataAquisicao": { "type": "string", "maxLength": 50 },
+        "TipoEquipamento": { "type": "string", "maxLength": 100 },
+        "marca": { "type": "string", "maxLength": 100 },
+        "modelo": { "type": "string", "maxLength": 150 },
+        "serial": { "type": "string", "maxLength": 100 },
+        "NumeroPatrimonio": { "type": "string", "maxLength": 100 },
+        "EstadoEquipamento": { "type": "string", "maxLength": 100 },
+        "situacao": { "type": "string", "maxLength": 100 },
+        "colaboradorId": { "type": "string", "maxLength": 100 },
+        "colaboradorNome": { "type": "string", "maxLength": 150 },
+        "colaboradorEmail": { "type": "string", "maxLength": 150 },
+        "observacao": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "uid": { "type": "string", "maxLength": 128 }
       },
       "required": ["NumeroPatrimonio", "serial", "marca", "modelo", "TipoEquipamento", "EstadoEquipamento", "DataAquisicao"]
     }
@@ -24,7 +28,7 @@
   "firestore": {
     "/assets/{assetId}": {
       "schema": "Asset",
-      "description": "Collection of assets"
+      "description": "Collection of inventory assets"
     }
   }
 }
