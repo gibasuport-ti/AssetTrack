@@ -12,7 +12,7 @@ export interface Asset {
   createdAt: string;
   updatedAt?: string;
   uid?: string;
-  situacao?: 'Estoque' | 'Colaborador';
+  situacao?: string;
   colaboradorId?: string;
   colaboradorNome?: string;
   colaboradorEmail?: string;

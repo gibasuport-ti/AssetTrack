@@ -112,23 +112,173 @@ const App: React.FC = () => {
   const [isCustomType, setIsCustomType] = useState(false);
   const [isCustomBrand, setIsCustomBrand] = useState(false);
   const [isCustomModel, setIsCustomModel] = useState(false);
+  const [isCustomStatus, setIsCustomStatus] = useState(false);
+  const [isCustomSituacao, setIsCustomSituacao] = useState(false);
 
-  // Calcula tipos customizados existentes nos registros salvos
-  const customEquipmentTypes = useMemo(() => {
-    const types = new Set<string>();
+  // Itens customizados persistidos localmente
+  const [storedCustomTypes, setStoredCustomTypes] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('assettrack_custom_types');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [storedCustomBrands, setStoredCustomBrands] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('assettrack_custom_brands');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [storedCustomModels, setStoredCustomModels] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('assettrack_custom_models');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [storedCustomStatuses, setStoredCustomStatuses] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('assettrack_custom_statuses');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [storedCustomSituacoes, setStoredCustomSituacoes] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('assettrack_custom_situacoes');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // Funções utilitárias para salvar e registrar novos valores em lote ou individuais
+  const saveCustomType = (type: string) => {
+    const trimmed = type.trim();
+    const standard = (Object.values(EquipmentType) as string[]).filter(t => t !== EquipmentType.OUTRO);
+    if (trimmed && !standard.some(s => s.toLowerCase() === trimmed.toLowerCase()) && !storedCustomTypes.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      const updated = [...storedCustomTypes, trimmed];
+      setStoredCustomTypes(updated);
+      try { localStorage.setItem('assettrack_custom_types', JSON.stringify(updated)); } catch (e) {}
+    }
+  };
+
+  const saveCustomBrand = (brand: string) => {
+    const trimmed = brand.trim();
+    if (trimmed && !BRANDS.some(b => b.toLowerCase() === trimmed.toLowerCase()) && !storedCustomBrands.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
+      const updated = [...storedCustomBrands, trimmed];
+      setStoredCustomBrands(updated);
+      try { localStorage.setItem('assettrack_custom_brands', JSON.stringify(updated)); } catch (e) {}
+    }
+  };
+
+  const saveCustomModel = (model: string) => {
+    const trimmed = model.trim();
+    if (trimmed && !MODELS.some(m => m.toLowerCase() === trimmed.toLowerCase()) && !storedCustomModels.some(m => m.toLowerCase() === trimmed.toLowerCase())) {
+      const updated = [...storedCustomModels, trimmed];
+      setStoredCustomModels(updated);
+      try { localStorage.setItem('assettrack_custom_models', JSON.stringify(updated)); } catch (e) {}
+    }
+  };
+
+  const saveCustomStatus = (status: string) => {
+    const trimmed = status.trim();
+    if (trimmed && !STATUS_OPTIONS.some(s => s.toLowerCase() === trimmed.toLowerCase()) && !storedCustomStatuses.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      const updated = [...storedCustomStatuses, trimmed];
+      setStoredCustomStatuses(updated);
+      try { localStorage.setItem('assettrack_custom_statuses', JSON.stringify(updated)); } catch (e) {}
+    }
+  };
+
+  const saveCustomSituacao = (situacao: string) => {
+    const trimmed = situacao.trim();
+    const defaults = ['Estoque', 'Colaborador'];
+    if (trimmed && !defaults.some(d => d.toLowerCase() === trimmed.toLowerCase()) && !storedCustomSituacoes.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      const updated = [...storedCustomSituacoes, trimmed];
+      setStoredCustomSituacoes(updated);
+      try { localStorage.setItem('assettrack_custom_situacoes', JSON.stringify(updated)); } catch (e) {}
+    }
+  };
+
+  // Listas dinâmicas e unificadas para cada combobox (Padrão + Registros no BD + Customizados)
+  const availableEquipmentTypes = useMemo(() => {
+    const typeSet = new Set<string>();
+    (Object.values(EquipmentType) as string[]).filter(t => t !== EquipmentType.OUTRO).forEach(t => typeSet.add(t));
     assets.forEach(asset => {
-      if (asset.TipoEquipamento) {
-        types.add(asset.TipoEquipamento.toUpperCase());
+      if (asset.TipoEquipamento && asset.TipoEquipamento.trim()) {
+        typeSet.add(asset.TipoEquipamento.trim());
       }
     });
-    const standardTypes = (Object.values(EquipmentType) as string[]).map(t => t.toUpperCase());
-    return Array.from(types)
-      .filter(t => !standardTypes.includes(t) && t.trim() !== '')
-      .map(t => {
-        const original = assets.find(a => a.TipoEquipamento && a.TipoEquipamento.toUpperCase() === t)?.TipoEquipamento;
-        return original || t;
-      });
-  }, [assets]);
+    storedCustomTypes.forEach(t => {
+      if (t && t.trim()) typeSet.add(t.trim());
+    });
+    return Array.from(typeSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [assets, storedCustomTypes]);
+
+  const availableBrands = useMemo(() => {
+    const brandSet = new Set<string>();
+    BRANDS.forEach(b => { if (b && b.trim()) brandSet.add(b.trim()); });
+    assets.forEach(asset => {
+      if (asset.marca && asset.marca.trim()) {
+        brandSet.add(asset.marca.trim());
+      }
+    });
+    storedCustomBrands.forEach(b => {
+      if (b && b.trim()) brandSet.add(b.trim());
+    });
+    return Array.from(brandSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [assets, storedCustomBrands]);
+
+  const availableModels = useMemo(() => {
+    const modelSet = new Set<string>();
+    MODELS.forEach(m => { if (m && m.trim()) modelSet.add(m.trim()); });
+    assets.forEach(asset => {
+      if (asset.modelo && asset.modelo.trim()) {
+        modelSet.add(asset.modelo.trim());
+      }
+    });
+    storedCustomModels.forEach(m => {
+      if (m && m.trim()) modelSet.add(m.trim());
+    });
+    return Array.from(modelSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [assets, storedCustomModels]);
+
+  const availableStatuses = useMemo(() => {
+    const statusSet = new Set<string>();
+    STATUS_OPTIONS.forEach(s => { if (s && s.trim()) statusSet.add(s.trim()); });
+    assets.forEach(asset => {
+      if (asset.EstadoEquipamento && asset.EstadoEquipamento.trim()) {
+        statusSet.add(asset.EstadoEquipamento.trim());
+      }
+    });
+    storedCustomStatuses.forEach(s => {
+      if (s && s.trim()) statusSet.add(s.trim());
+    });
+    return Array.from(statusSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [assets, storedCustomStatuses]);
+
+  const availableSituacoes = useMemo(() => {
+    const situacaoSet = new Set<string>();
+    ['Estoque', 'Colaborador'].forEach(s => situacaoSet.add(s));
+    assets.forEach(asset => {
+      if (asset.situacao && asset.situacao.trim()) {
+        situacaoSet.add(asset.situacao.trim());
+      }
+    });
+    storedCustomSituacoes.forEach(s => {
+      if (s && s.trim()) situacaoSet.add(s.trim());
+    });
+    return Array.from(situacaoSet);
+  }, [assets, storedCustomSituacoes]);
 
   // Controle do painel de segurança e conexão (Práticas de Segurança e GitHub Pages)
   const [showSecurityModal, setShowSecurityModal] = useState(false);
@@ -181,7 +331,7 @@ const App: React.FC = () => {
     marca: '',
     modelo: '',
     serial: '',
-    NumeroPatrimonio: '',
+    NumeroPatrimonio: 'CIRION',
     EstadoEquipamento: 'BOM',
     observacao: '',
     situacao: 'Estoque',
@@ -311,6 +461,13 @@ const App: React.FC = () => {
 
     setIsSaving(true);
 
+    // Persiste novos valores customizados para garantir inclusão automática e imediata em todos os comboboxes
+    if (formData.TipoEquipamento) saveCustomType(formData.TipoEquipamento);
+    if (formData.marca) saveCustomBrand(formData.marca);
+    if (formData.modelo) saveCustomModel(formData.modelo);
+    if (formData.EstadoEquipamento) saveCustomStatus(formData.EstadoEquipamento);
+    if (formData.situacao) saveCustomSituacao(formData.situacao);
+
     try {
       if (editingAsset) {
         await assetService.updateAsset(editingAsset.id, formData);
@@ -319,13 +476,20 @@ const App: React.FC = () => {
         setIsCustomType(false);
         setIsCustomBrand(false);
         setIsCustomModel(false);
+        setIsCustomStatus(false);
+        setIsCustomSituacao(false);
       } else {
         await assetService.addAsset(formData);
         
+        setIsCustomType(false);
+        setIsCustomBrand(false);
+        setIsCustomModel(false);
+        setIsCustomStatus(false);
+        setIsCustomSituacao(false);
         setFormData(prev => ({
           ...prev,
           serial: '',
-          NumeroPatrimonio: '',
+          NumeroPatrimonio: 'CIRION',
           observacao: '',
           colaboradorId: '',
           colaboradorNome: '',
@@ -347,14 +511,17 @@ const App: React.FC = () => {
 
   const handleEdit = (asset: Asset) => {
     setEditingAsset(asset);
-    const standardTypes = (Object.values(EquipmentType) as string[]).filter(t => t !== EquipmentType.OUTRO);
-    const customT = !!(asset.TipoEquipamento && !standardTypes.includes(asset.TipoEquipamento));
-    const customB = !!(asset.marca && !BRANDS.includes(asset.marca.toUpperCase()));
-    const customM = !!(asset.modelo && !MODELS.includes(asset.modelo.toUpperCase()));
+    const customT = !!(asset.TipoEquipamento && !availableEquipmentTypes.some(t => t.toLowerCase() === (asset.TipoEquipamento || '').toLowerCase()));
+    const customB = !!(asset.marca && !availableBrands.some(b => b.toLowerCase() === (asset.marca || '').toLowerCase()));
+    const customM = !!(asset.modelo && !availableModels.some(m => m.toLowerCase() === (asset.modelo || '').toLowerCase()));
+    const customS = !!(asset.EstadoEquipamento && !availableStatuses.some(s => s.toLowerCase() === (asset.EstadoEquipamento || '').toLowerCase()));
+    const customSit = !!(asset.situacao && !availableSituacoes.some(s => s.toLowerCase() === (asset.situacao || '').toLowerCase()));
     
     setIsCustomType(customT);
     setIsCustomBrand(customB);
     setIsCustomModel(customM);
+    setIsCustomStatus(customS);
+    setIsCustomSituacao(customSit);
 
     setFormData({
       DataAquisicao: asset.DataAquisicao,
@@ -504,6 +671,8 @@ const App: React.FC = () => {
     setIsCustomType(false);
     setIsCustomBrand(false);
     setIsCustomModel(false);
+    setIsCustomStatus(false);
+    setIsCustomSituacao(false);
     setShowForm(true); 
   };
 
@@ -651,16 +820,8 @@ const App: React.FC = () => {
                       className={`w-full border-2 rounded-xl py-2 px-3 text-xs font-bold outline-none transition-all cursor-pointer ${darkMode ? 'bg-slate-800 border-slate-700 text-white focus:border-blue-500' : 'bg-white border-slate-200 text-slate-900 focus:border-blue-500'}`}
                     >
                       <option value="">TODOS OS TIPOS ({assets.length})</option>
-                      {Object.values(EquipmentType).filter(t => t !== EquipmentType.OUTRO).map(type => {
-                        const count = assets.filter(a => a.TipoEquipamento === type).length;
-                        return (
-                          <option key={type} value={type}>
-                            {type} ({count})
-                          </option>
-                        );
-                      })}
-                      {customEquipmentTypes.map(type => {
-                        const count = assets.filter(a => a.TipoEquipamento === type).length;
+                      {availableEquipmentTypes.map(type => {
+                        const count = assets.filter(a => (a.TipoEquipamento || '').trim().toUpperCase() === type.trim().toUpperCase()).length;
                         return (
                           <option key={type} value={type}>
                             {type} ({count})
@@ -922,7 +1083,21 @@ const App: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               <form id="asset-form" onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className={`md:col-span-2 p-4 rounded-xl border-2 transition-all ${darkMode ? 'bg-blue-950/20 border-blue-900/50' : 'bg-blue-50 border-blue-200'}`}>
-                  <label className="block text-[11px] font-black mb-1.5 uppercase tracking-wider text-blue-500">Tipo de Equipamento</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-blue-500">Tipo de Equipamento</label>
+                    {!isCustomType && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomType(true);
+                          setFormData({...formData, TipoEquipamento: '' as EquipmentType});
+                        }}
+                        className="text-[10px] font-bold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
+                        + Novo Tipo
+                      </button>
+                    )}
+                  </div>
                   {!isCustomType ? (
                     <select 
                       value={formData.TipoEquipamento}
@@ -937,42 +1112,69 @@ const App: React.FC = () => {
                       className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                       required
                     >
-                      {Object.values(EquipmentType).filter(t => t !== EquipmentType.OUTRO).map(type => (
+                      <option value="" disabled>Selecione o tipo de equipamento</option>
+                      {availableEquipmentTypes.map(type => (
                         <option key={type} value={type}>{type}</option>
                       ))}
-                      {customEquipmentTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                      <option value="__CUSTOM__">OUTRO...</option>
+                      <option value="__CUSTOM__">+ OUTRO (Digitar novo tipo)...</option>
                     </select>
                   ) : (
                     <div className="relative">
                       <input 
                         type="text"
-                        placeholder="Digite o tipo de equipamento..."
+                        placeholder="Digite o novo tipo (ex: SERVIDOR, SWITCH, IMPRESSORA)..."
                         value={formData.TipoEquipamento}
                         onChange={e => setFormData({...formData, TipoEquipamento: e.target.value as any})}
-                        className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                        className={`w-full border-2 rounded-xl pl-4 pr-16 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                         required
                         autoFocus
                       />
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setIsCustomType(false);
-                          setFormData({...formData, TipoEquipamento: EquipmentType.NOTEBOOK});
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
-                        title="Voltar para lista"
-                      >
-                        <i className="fa-solid fa-rotate-left"></i>
-                      </button>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {formData.TipoEquipamento.trim() && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              saveCustomType(formData.TipoEquipamento);
+                              setIsCustomType(false);
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Confirmar e incluir na lista"
+                          >
+                            <i className="fa-solid fa-check font-black text-sm"></i>
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setIsCustomType(false);
+                            setFormData({...formData, TipoEquipamento: EquipmentType.NOTEBOOK});
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-500/10 rounded-lg transition-colors"
+                          title="Voltar para lista de tipos"
+                        >
+                          <i className="fa-solid fa-rotate-left text-sm"></i>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">Marca</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">Marca</label>
+                    {!isCustomBrand && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomBrand(true);
+                          setFormData({...formData, marca: ''});
+                        }}
+                        className="text-[10px] font-bold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
+                        + Nova Marca
+                      </button>
+                    )}
+                  </div>
                   {!isCustomBrand ? (
                     <select 
                       value={formData.marca} 
@@ -987,38 +1189,67 @@ const App: React.FC = () => {
                       className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
                       required
                     >
-                      <option value="" disabled>Selecione</option>
-                      {BRANDS.map(brand => <option key={brand} value={brand}>{brand}</option>)}
-                      <option value="__CUSTOM__">OUTRA...</option>
+                      <option value="" disabled>Selecione a marca</option>
+                      {availableBrands.map(brand => <option key={brand} value={brand}>{brand}</option>)}
+                      <option value="__CUSTOM__">+ OUTRA (Digitar nova marca)...</option>
                     </select>
                   ) : (
                     <div className="relative">
                       <input 
                         type="text"
-                        placeholder="Digite a marca..."
+                        placeholder="Digite a nova marca (ex: ASUS, CISCO, ACER)..."
                         value={formData.marca}
                         onChange={e => setFormData({...formData, marca: e.target.value})}
-                        className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                        className={`w-full border-2 rounded-xl pl-4 pr-16 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                         required
                         autoFocus
                       />
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setIsCustomBrand(false);
-                          setFormData({...formData, marca: ''});
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
-                        title="Voltar para lista"
-                      >
-                        <i className="fa-solid fa-rotate-left"></i>
-                      </button>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {formData.marca.trim() && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              saveCustomBrand(formData.marca);
+                              setIsCustomBrand(false);
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Confirmar e incluir na lista"
+                          >
+                            <i className="fa-solid fa-check font-black text-sm"></i>
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setIsCustomBrand(false);
+                            setFormData({...formData, marca: ''});
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-500/10 rounded-lg transition-colors"
+                          title="Voltar para lista de marcas"
+                        >
+                          <i className="fa-solid fa-rotate-left text-sm"></i>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">Modelo</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">Modelo</label>
+                    {!isCustomModel && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomModel(true);
+                          setFormData({...formData, modelo: ''});
+                        }}
+                        className="text-[10px] font-bold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
+                        + Novo Modelo
+                      </button>
+                    )}
+                  </div>
                   {!isCustomModel ? (
                     <select 
                       value={formData.modelo} 
@@ -1033,32 +1264,49 @@ const App: React.FC = () => {
                       className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
                       required
                     >
-                      <option value="" disabled>Selecione</option>
-                      {MODELS.map(model => <option key={model} value={model}>{model}</option>)}
-                      <option value="__CUSTOM__">OUTRO...</option>
+                      <option value="" disabled>Selecione o modelo</option>
+                      {availableModels.map(model => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                      <option value="__CUSTOM__">+ OUTRO (Digitar novo modelo)...</option>
                     </select>
                   ) : (
                     <div className="relative">
                       <input 
                         type="text"
-                        placeholder="Digite o modelo..."
+                        placeholder="Digite o novo modelo (ex: ThinkPad P14s)..."
                         value={formData.modelo}
                         onChange={e => setFormData({...formData, modelo: e.target.value})}
-                        className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                        className={`w-full border-2 rounded-xl pl-4 pr-16 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
                         required
                         autoFocus
                       />
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setIsCustomModel(false);
-                          setFormData({...formData, modelo: ''});
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
-                        title="Voltar para lista"
-                      >
-                        <i className="fa-solid fa-rotate-left"></i>
-                      </button>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {formData.modelo.trim() && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              saveCustomModel(formData.modelo);
+                              setIsCustomModel(false);
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Confirmar e incluir na lista"
+                          >
+                            <i className="fa-solid fa-check font-black text-sm"></i>
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setIsCustomModel(false);
+                            setFormData({...formData, modelo: ''});
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-500/10 rounded-lg transition-colors"
+                          title="Voltar para lista de modelos"
+                        >
+                          <i className="fa-solid fa-rotate-left text-sm"></i>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1100,30 +1348,159 @@ const App: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">Estado do Equipto.</label>
-                  <select 
-                    value={formData.EstadoEquipamento} 
-                    onChange={e => setFormData({...formData, EstadoEquipamento: e.target.value})} 
-                    className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
-                    required
-                  >
-                    {STATUS_OPTIONS.map(status => <option key={status} value={status}>{status}</option>)}
-                  </select>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider">Estado do Equipto.</label>
+                    {!isCustomStatus && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomStatus(true);
+                          setFormData({...formData, EstadoEquipamento: ''});
+                        }}
+                        className="text-[10px] font-bold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                      >
+                        + Novo Estado
+                      </button>
+                    )}
+                  </div>
+                  {!isCustomStatus ? (
+                    <select 
+                      value={formData.EstadoEquipamento} 
+                      onChange={e => {
+                        if (e.target.value === '__CUSTOM__') {
+                          setIsCustomStatus(true);
+                          setFormData({...formData, EstadoEquipamento: ''});
+                        } else {
+                          setFormData({...formData, EstadoEquipamento: e.target.value});
+                        }
+                      }} 
+                      className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                      required
+                    >
+                      <option value="" disabled>Selecione o estado</option>
+                      {availableStatuses.map(status => <option key={status} value={status}>{status}</option>)}
+                      <option value="__CUSTOM__">+ OUTRO (Digitar novo estado)...</option>
+                    </select>
+                  ) : (
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        placeholder="Digite o novo estado (ex: EM MANUTENÇÃO, SUCATA)..."
+                        value={formData.EstadoEquipamento}
+                        onChange={e => setFormData({...formData, EstadoEquipamento: e.target.value})}
+                        className={`w-full border-2 rounded-xl pl-4 pr-16 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                        required
+                        autoFocus
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {formData.EstadoEquipamento.trim() && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              saveCustomStatus(formData.EstadoEquipamento);
+                              setIsCustomStatus(false);
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                            title="Confirmar e incluir na lista"
+                          >
+                            <i className="fa-solid fa-check font-black text-sm"></i>
+                          </button>
+                        )}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setIsCustomStatus(false);
+                            setFormData({...formData, EstadoEquipamento: 'BOM'});
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-500/10 rounded-lg transition-colors"
+                          title="Voltar para lista de estados"
+                        >
+                          <i className="fa-solid fa-rotate-left text-sm"></i>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5 p-4 rounded-xl border-2 transition-all bg-slate-50 border-slate-200 dark:bg-slate-900/40 dark:border-slate-800">
                   <div className="md:col-span-2">
-                    <label className="block text-[11px] font-black mb-1.5 uppercase tracking-wider text-blue-500 flex items-center gap-1">
-                      <i className="fa-solid fa-location-dot text-blue-500"></i> Localização / Destinação
-                    </label>
-                    <select 
-                      value={formData.situacao || 'Estoque'} 
-                      onChange={e => setFormData({...formData, situacao: e.target.value as 'Estoque' | 'Colaborador'})} 
-                      className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
-                    >
-                      <option value="Estoque">📦 Em Estoque</option>
-                      <option value="Colaborador">👤 Com Colaborador</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-blue-500 flex items-center gap-1">
+                        <i className="fa-solid fa-location-dot text-blue-500"></i> Localização / Destinação
+                      </label>
+                      {!isCustomSituacao && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomSituacao(true);
+                            setFormData({...formData, situacao: ''});
+                          }}
+                          className="text-[10px] font-bold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                        >
+                          + Nova Destinação
+                        </button>
+                      )}
+                    </div>
+                    {!isCustomSituacao ? (
+                      <select 
+                        value={formData.situacao || 'Estoque'} 
+                        onChange={e => {
+                          if (e.target.value === '__CUSTOM__') {
+                            setIsCustomSituacao(true);
+                            setFormData({...formData, situacao: ''});
+                          } else {
+                            setFormData({...formData, situacao: e.target.value});
+                          }
+                        }} 
+                        className={`w-full border-2 rounded-xl px-4 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`} 
+                      >
+                        <option value="" disabled>Selecione a destinação</option>
+                        {availableSituacoes.map(sit => (
+                          <option key={sit} value={sit}>
+                            {sit === 'Estoque' ? '📦 Em Estoque' : sit === 'Colaborador' ? '👤 Com Colaborador' : `📌 ${sit}`}
+                          </option>
+                        ))}
+                        <option value="__CUSTOM__">+ OUTRA (Digitar nova destinação)...</option>
+                      </select>
+                    ) : (
+                      <div className="relative">
+                        <input 
+                          type="text"
+                          placeholder="Digite a nova destinação (ex: LAB DE TESTES, TI MANUTENÇÃO)..."
+                          value={formData.situacao || ''}
+                          onChange={e => setFormData({...formData, situacao: e.target.value})}
+                          className={`w-full border-2 rounded-xl pl-4 pr-16 py-2.5 outline-none font-bold text-sm focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+                          required
+                          autoFocus
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {formData.situacao && formData.situacao.trim() && (
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                saveCustomSituacao(formData.situacao || '');
+                                setIsCustomSituacao(false);
+                              }}
+                              className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                              title="Confirmar e incluir na lista"
+                            >
+                              <i className="fa-solid fa-check font-black text-sm"></i>
+                            </button>
+                          )}
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setIsCustomSituacao(false);
+                              setFormData({...formData, situacao: 'Estoque'});
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-500/10 rounded-lg transition-colors"
+                            title="Voltar para lista de destinações"
+                          >
+                            <i className="fa-solid fa-rotate-left text-sm"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {formData.situacao === 'Colaborador' && (
