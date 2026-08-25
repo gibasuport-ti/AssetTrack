@@ -297,36 +297,44 @@ export const assetService = {
   },
 
   /**
-   * Remove um ativo do Firestore/IndexedDB
+   * Remove um ativo do Firestore/IndexedDB e de todas as mídias locais
    */
   deleteAsset: async (id: string): Promise<void> => {
     const isCloud = getStorageMode() === 'cloud';
     const path = `assets/${id}`;
 
-    if (isCloud) {
-      try {
-        await deleteDoc(doc(db, 'assets', id));
-        
-        // Remove do backup local
-        try {
-          const localDB = await getDB();
-          await localDB.delete(STORE_NAME, id);
-        } catch (localErr) {
-          console.warn("Erro ao remover do backup local:", localErr);
-        }
-        return;
-      } catch (err) {
-        console.warn("Falha ao remover item da nuvem. Removendo localmente do IndexedDB...", err);
-      }
-    }
-
-    // Remoção puramente local
+    // 1. Sempre limpa do IndexedDB local
     try {
       const localDB = await getDB();
       await localDB.delete(STORE_NAME, id);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, path);
-      throw err;
+    } catch (localErr) {
+      console.warn("Erro ao remover do backup local IndexedDB:", localErr);
+    }
+
+    // 2. Sempre limpa do localStorage antigo se existir
+    try {
+      const rawLocal = localStorage.getItem(OLD_STORAGE_KEY);
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((a: any) => String(a.id) !== String(id));
+          localStorage.setItem(OLD_STORAGE_KEY, JSON.stringify(filtered));
+        }
+      }
+    } catch (lsErr) {
+      console.warn("Erro ao limpar do localStorage:", lsErr);
+    }
+
+    // 3. Se estiver em nuvem, remove do Firestore
+    if (isCloud) {
+      try {
+        await deleteDoc(doc(db, 'assets', id));
+        return;
+      } catch (err) {
+        console.warn("Falha ao remover item da nuvem:", err);
+        handleFirestoreError(err, OperationType.DELETE, path);
+        throw err;
+      }
     }
   },
 

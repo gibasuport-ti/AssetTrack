@@ -601,8 +601,9 @@ const App: React.FC = () => {
       const nextSelected = new Set(selectedIds);
       nextSelected.delete(id);
       setSelectedIds(nextSelected);
-    } catch (err) {
-      alert('Erro ao tentar excluir o item localmente.');
+    } catch (err: any) {
+      console.error('Erro ao excluir item:', err);
+      alert('Erro ao tentar excluir o item. Verifique sua conexão ou permissão.');
     }
   };
 
