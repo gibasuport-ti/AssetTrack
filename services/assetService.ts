@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   getDocs, 
@@ -8,14 +7,12 @@ import {
   doc, 
   query, 
   orderBy, 
-  serverTimestamp,
-  Timestamp,
-  getDoc,
   setDoc
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { Asset, AssetFormData } from '../types';
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { securityService } from './securityService';
 
 const STORE_NAME = 'assets';
 const OLD_STORAGE_KEY = 'asset_track_local_db';
@@ -100,6 +97,25 @@ const getStorageMode = (): 'cloud' | 'local' => {
   return (localStorage.getItem('assettrack_storage_mode') as 'cloud' | 'local') || 'cloud';
 };
 
+const sanitizeFormData = (data: AssetFormData): AssetFormData => {
+  return {
+    ...data,
+    NumeroPatrimonio: securityService.sanitizeInput(data.NumeroPatrimonio || '').slice(0, 100),
+    serial: securityService.sanitizeInput(data.serial || '').slice(0, 100),
+    marca: securityService.sanitizeInput(data.marca || '').slice(0, 100),
+    modelo: securityService.sanitizeInput(data.modelo || '').slice(0, 150),
+    TipoEquipamento: securityService.sanitizeInput(data.TipoEquipamento || 'NOTEBOOK').slice(0, 100),
+    EstadoEquipamento: securityService.sanitizeInput(data.EstadoEquipamento || 'BOM').slice(0, 100),
+    DataAquisicao: securityService.sanitizeInput(data.DataAquisicao || '').slice(0, 50),
+    observacao: securityService.sanitizeInput(data.observacao || '').slice(0, 2000),
+    situacao: securityService.sanitizeInput(data.situacao || 'Estoque').slice(0, 100) as any,
+    colaboradorId: securityService.sanitizeInput(data.colaboradorId || '').slice(0, 100),
+    colaboradorNome: securityService.sanitizeInput(data.colaboradorNome || '').slice(0, 150),
+    colaboradorEmail: securityService.sanitizeInput(data.colaboradorEmail || '').slice(0, 150),
+    fotos: Array.isArray(data.fotos) ? data.fotos.slice(0, 6) : []
+  };
+};
+
 export const assetService = {
   /**
    * Busca todos os ativos salvos no Firestore/IndexedDB dependendo da configuração.
@@ -133,7 +149,6 @@ export const assetService = {
 
         // 2. Se a nuvem estiver vazia, tenta carregar dados locais antigos
         if (cloudAssets.length === 0) {
-          // Tenta obter dados do localStorage antigo
           let legacyAssets: Asset[] = [];
           try {
             const rawLocal = localStorage.getItem(OLD_STORAGE_KEY);
@@ -144,7 +159,6 @@ export const assetService = {
             console.error('Erro ao ler localStorage antigo para migração:', e);
           }
 
-          // Tenta obter dados do IndexedDB antigo
           let indexedAssets: Asset[] = [];
           try {
             const localDB = await getDB();
@@ -153,7 +167,6 @@ export const assetService = {
             console.error('Erro ao ler IndexedDB para migração:', e);
           }
 
-          // Combina e remove duplicados usando o id do ativo
           const mergedMap = new Map<string, Asset>();
           legacyAssets.forEach(a => {
             if (a && a.id) mergedMap.set(a.id, a);
@@ -164,12 +177,10 @@ export const assetService = {
 
           const totalLocalAssets = Array.from(mergedMap.values());
 
-          // Se houver dados locais, vamos migrá-los automaticamente para a nuvem
           if (totalLocalAssets.length > 0) {
             console.log(`Dados locais encontrados (${totalLocalAssets.length}). Iniciando migração automática para o Firestore...`);
             await assetService.migrateLocalToCloud(totalLocalAssets);
             
-            // Re-busca da nuvem após migração para retornar o conteúdo fresco
             const freshSnapshot = await getDocs(q);
             return freshSnapshot.docs.map(doc => ({
               ...doc.data(),
@@ -188,7 +199,6 @@ export const assetService = {
     try {
       const localDB = await getDB();
       const localAssets = await localDB.getAll(STORE_NAME);
-      // Ordenação decrescente baseada no campo createdAt
       return localAssets.sort((a: Asset, b: Asset) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, path);
@@ -197,11 +207,12 @@ export const assetService = {
   },
 
   /**
-   * Adiciona um novo ativo ao Firestore/IndexedDB
+   * Adiciona um novo ativo ao Firestore/IndexedDB com sanitização e auditoria
    */
-  addAsset: async (formData: AssetFormData): Promise<Asset> => {
+  addAsset: async (rawFormData: AssetFormData): Promise<Asset> => {
     const isCloud = getStorageMode() === 'cloud';
     const path = 'assets';
+    const formData = sanitizeFormData(rawFormData);
     
     const id = Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
     const newAssetData: Asset = {
@@ -211,6 +222,8 @@ export const assetService = {
       uid: auth.currentUser?.uid || 'anonymous'
     };
 
+    let savedAsset: Asset = newAssetData;
+
     if (isCloud) {
       try {
         const docRef = await addDoc(collection(db, path), {
@@ -218,44 +231,55 @@ export const assetService = {
           createdAt: newAssetData.createdAt,
           uid: newAssetData.uid
         });
-        const savedAsset = { ...newAssetData, id: docRef.id };
+        savedAsset = { ...newAssetData, id: docRef.id };
         
-        // Salva backup local
         try {
           const localDB = await getDB();
           await localDB.put(STORE_NAME, savedAsset);
         } catch (localErr) {
           console.warn("Erro ao salvar cópia de segurança local:", localErr);
         }
-        
-        return savedAsset;
       } catch (err) {
         console.warn("Falha ao salvar na nuvem. Gravando no IndexedDB...", err);
       }
     }
 
-    // Gravação puramente local no IndexedDB
-    try {
-      const localDB = await getDB();
-      await localDB.put(STORE_NAME, newAssetData);
-      return newAssetData;
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, path);
-      throw err;
+    if (!isCloud || savedAsset.id === id) {
+      try {
+        const localDB = await getDB();
+        await localDB.put(STORE_NAME, newAssetData);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, path);
+        throw err;
+      }
     }
+
+    // Grava Trilha de Auditoria
+    await securityService.logAction({
+      action: 'CREATE',
+      userEmail: auth.currentUser?.email || 'Anônimo / Local',
+      userName: auth.currentUser?.displayName || 'Usuário',
+      userId: auth.currentUser?.uid || 'anonymous',
+      details: `Cadastrado ativo: ${savedAsset.marca} ${savedAsset.modelo} (Patrimônio: ${savedAsset.NumeroPatrimonio})`,
+      assetSerial: savedAsset.serial,
+      assetPatrimonio: savedAsset.NumeroPatrimonio
+    });
+
+    return savedAsset;
   },
 
   /**
-   * Atualiza um ativo existente no Firestore/IndexedDB
+   * Atualiza um ativo existente no Firestore/IndexedDB com sanitização e auditoria
    */
-  updateAsset: async (id: string, formData: AssetFormData): Promise<Asset> => {
+  updateAsset: async (id: string, rawFormData: AssetFormData): Promise<Asset> => {
     const isCloud = getStorageMode() === 'cloud';
     const path = `assets/${id}`;
+    const formData = sanitizeFormData(rawFormData);
     
     const updatedAsset: Asset = {
       ...formData,
       id,
-      createdAt: (formData as any).createdAt || new Date().toISOString(),
+      createdAt: (rawFormData as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       uid: auth.currentUser?.uid || 'anonymous'
     };
@@ -268,36 +292,44 @@ export const assetService = {
           updatedAt: updatedAsset.updatedAt
         });
         
-        // Sincroniza local
         try {
           const localDB = await getDB();
           await localDB.put(STORE_NAME, updatedAsset);
         } catch (localErr) {
           console.warn("Erro ao sincronizar atualização no backup local:", localErr);
         }
-        
-        return updatedAsset;
       } catch (err) {
         console.warn("Falha ao atualizar na nuvem. Atualizando localmente no IndexedDB...", err);
       }
     }
 
-    // Gravação puramente local
     try {
       const localDB = await getDB();
       await localDB.put(STORE_NAME, {
         ...updatedAsset,
         createdAt: updatedAsset.createdAt || new Date().toISOString()
       });
-      return updatedAsset;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
       throw err;
     }
+
+    // Grava Trilha de Auditoria
+    await securityService.logAction({
+      action: 'UPDATE',
+      userEmail: auth.currentUser?.email || 'Anônimo / Local',
+      userName: auth.currentUser?.displayName || 'Usuário',
+      userId: auth.currentUser?.uid || 'anonymous',
+      details: `Atualizado ativo: ${updatedAsset.marca} ${updatedAsset.modelo} (Patrimônio: ${updatedAsset.NumeroPatrimonio})`,
+      assetSerial: updatedAsset.serial,
+      assetPatrimonio: updatedAsset.NumeroPatrimonio
+    });
+
+    return updatedAsset;
   },
 
   /**
-   * Remove um ativo do Firestore/IndexedDB e de todas as mídias locais
+   * Remove um ativo do Firestore/IndexedDB com trilha de auditoria
    */
   deleteAsset: async (id: string): Promise<void> => {
     const isCloud = getStorageMode() === 'cloud';
@@ -332,6 +364,15 @@ export const assetService = {
         console.warn("Falha ao remover item da nuvem (Firestore):", err);
       }
     }
+
+    // Grava Trilha de Auditoria
+    await securityService.logAction({
+      action: 'DELETE',
+      userEmail: auth.currentUser?.email || 'Anônimo / Local',
+      userName: auth.currentUser?.displayName || 'Usuário',
+      userId: auth.currentUser?.uid || 'anonymous',
+      details: `Excluído ativo ID: ${id}`
+    });
   },
 
   /**
@@ -344,7 +385,6 @@ export const assetService = {
       if (providedAssets) {
         localAssets = providedAssets;
       } else {
-        // Tenta obter tudo do localStorage antigo
         let legacyAssets: Asset[] = [];
         try {
           const rawLocal = localStorage.getItem(OLD_STORAGE_KEY);
@@ -355,7 +395,6 @@ export const assetService = {
           console.error(e);
         }
 
-        // Tenta obter tudo do IndexedDB antigo
         let indexedAssets: Asset[] = [];
         try {
           const localDB = await getDB();
@@ -364,7 +403,6 @@ export const assetService = {
           console.error(e);
         }
 
-        // Combina e remove duplicados usando o id
         const mergedMap = new Map<string, Asset>();
         legacyAssets.forEach(a => {
           if (a && a.id) mergedMap.set(a.id, a);
@@ -380,7 +418,6 @@ export const assetService = {
       let migratedCount = 0;
       for (const asset of localAssets) {
         try {
-          // Usa id original para setDoc, evitando duplicações
           const assetId = asset.id || Math.random().toString(36).substr(2, 9);
           await setDoc(doc(db, 'assets', assetId), {
             ...asset,
@@ -393,7 +430,6 @@ export const assetService = {
         }
       }
       
-      // Limpa as bases locais após migração sucedida para não duplicar no futuro
       if (migratedCount > 0) {
         try {
           localStorage.removeItem(OLD_STORAGE_KEY);
@@ -414,7 +450,7 @@ export const assetService = {
   },
 
   /**
-   * Importa dados de um arquivo JSON para o Firestore
+   * Importa dados de um arquivo JSON para o Firestore com validação
    */
   importLocalData: async (jsonData: string): Promise<boolean> => {
     const path = 'assets';
@@ -426,8 +462,9 @@ export const assetService = {
         const promises = data
           .filter(a => a && typeof a === 'object' && (a.serial || a.NumeroPatrimonio))
           .map(asset => {
+             const cleanItem = sanitizeFormData(asset);
              const itemToSave = {
-               ...asset,
+               ...cleanItem,
                createdAt: asset.createdAt || new Date().toISOString(),
                uid: auth.currentUser?.uid || 'anonymous'
              };
@@ -435,6 +472,15 @@ export const assetService = {
           });
 
         await Promise.all(promises);
+
+        await securityService.logAction({
+          action: 'IMPORT',
+          userEmail: auth.currentUser?.email || 'Anônimo / Local',
+          userName: auth.currentUser?.displayName || 'Usuário',
+          userId: auth.currentUser?.uid || 'anonymous',
+          details: `Importação em massa de ${promises.length} registros realizada com sucesso.`
+        });
+
         return true;
       }
       return false;

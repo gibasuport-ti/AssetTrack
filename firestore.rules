@@ -57,15 +57,27 @@ service cloud.firestore {
     // ===============================================================
 
     match /assets/{assetId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+      // Requer autenticação (Google Auth ou anônimo autenticado pelo Firebase)
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow update: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow delete: if isAuthenticated();
     }
 
     match /users/{userId} {
       allow read: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow write: if isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /security_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }

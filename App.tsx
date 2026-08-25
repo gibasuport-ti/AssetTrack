@@ -2,14 +2,17 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assetService } from './services/assetService';
 import { geminiService } from './services/geminiService';
-import { Asset, AssetFormData, EquipmentType } from './types';
+import { securityService } from './services/securityService';
+import { Asset, AssetFormData, EquipmentType, SecurityConfig } from './types';
 import BarcodeScanner from './components/BarcodeScanner';
 import { PhotoCaptureModal } from './components/PhotoCaptureModal';
 import { PhotoViewerModal } from './components/PhotoViewerModal';
+import { SecurityModal } from './components/SecurityModal';
+import { AccessGate } from './components/AccessGate';
 import { compressImage } from './services/imageUtils';
 import * as XLSX from 'xlsx';
 import { auth, db } from './services/firebase';
-import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, User } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously, User } from 'firebase/auth';
 
 // ... (ErrorBoundary remains the same)
 
@@ -300,6 +303,11 @@ const App: React.FC = () => {
   });
   const [customFirebaseConfig, setCustomFirebaseConfig] = useState(() => localStorage.getItem('assettrack_custom_firebase_config') || '');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(() => securityService.getSecurityConfig());
+
+  const authCheck = useMemo(() => {
+    return securityService.isUserAuthorized(user, securityConfig);
+  }, [user, securityConfig]);
 
   const handleSaveSecurity = () => {
     if (localGeminiKey) {
@@ -328,6 +336,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const serialInputRef = useRef<HTMLInputElement>(null);
   const photoUploadInputRef = useRef<HTMLInputElement>(null);
+  const directCameraInputRef = useRef<HTMLInputElement>(null);
 
   // Estados para Fotos e Evidências Fotográficas
   const [showPhotoCaptureModal, setShowPhotoCaptureModal] = useState(false);
@@ -426,12 +435,22 @@ const App: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const loggedUser = await securityService.loginWithGoogle();
+      setUser(loggedUser);
       setAuthError(null);
-    } catch (err) {
+      setSecurityConfig(securityService.getSecurityConfig());
+    } catch (err: any) {
       console.error("Erro ao entrar com Google:", err);
-      setAuthError("Erro ao entrar com Google. Verifique se popups estão permitidos.");
+      setAuthError(err?.message || "Erro ao entrar com Google. Verifique se popups estão permitidos.");
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      await securityService.logout();
+      setUser(null);
+    } catch (err) {
+      console.error("Erro ao sair da conta:", err);
     }
   };
 
@@ -708,6 +727,14 @@ const App: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+
+      securityService.logAction({
+        action: 'EXPORT',
+        userEmail: user?.email || 'Anônimo / Local',
+        userName: user?.displayName || 'Usuário',
+        userId: user?.uid || 'anonymous',
+        details: `Exportada planilha Excel com ${filteredAssets.length} registro(s) (${fileName})`
+      });
     } catch (err) {
       console.error('Erro ao exportar Excel:', err);
       alert('Erro ao gerar a planilha Excel. Tente novamente.');
@@ -735,6 +762,14 @@ const App: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+
+      securityService.logAction({
+        action: 'EXPORT',
+        userEmail: user?.email || 'Anônimo / Local',
+        userName: user?.displayName || 'Usuário',
+        userId: user?.uid || 'anonymous',
+        details: `Exportado arquivo CSV com ${filteredAssets.length} registro(s) (${fileName})`
+      });
     } catch (err) {
       console.error('Erro ao exportar CSV:', err);
       alert('Erro ao gerar o arquivo CSV.');
@@ -835,42 +870,72 @@ const App: React.FC = () => {
     setShowForm(true); 
   };
 
+  if (isAuthReady && !authCheck.authorized) {
+    return (
+      <AccessGate
+        darkMode={darkMode}
+        user={user}
+        reason={authCheck.reason}
+        onLogin={handleGoogleLogin}
+        onLogout={handleGoogleLogout}
+      />
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       <header className={`border-b-2 sticky top-0 z-40 shadow-sm transition-colors ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 w-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg">
-              <i className="fa-solid fa-qrcode text-white"></i>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 w-full flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-blue-600 p-2 rounded-xl shadow-lg flex items-center justify-center text-white">
+              <i className="fa-solid fa-qrcode text-base"></i>
             </div>
-            <h1 className="text-lg font-bold tracking-tight">AssetTrack QR</h1>
+            <div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight leading-tight">AssetTrack QR</h1>
+              <p className="text-[10px] text-slate-400 font-bold hidden sm:block">Controle de Patrimônio & Segurança</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            {authError && (
-              <button 
-                onClick={handleGoogleLogin} 
-                className="text-[10px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-1 rounded-md font-bold flex items-center gap-1 hover:bg-amber-500/20 transition-all"
-                title={authError}
-              >
-                <i className="fa-solid fa-triangle-exclamation"></i>
-                <span className="hidden sm:inline">Erro Auth - Login Google</span>
-              </button>
-            )}
-            
-            {user?.isAnonymous && !authError && (
-              <button 
-                onClick={handleGoogleLogin}
-                className={`text-[10px] hidden md:flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
-              >
-                <i className="fa-brands fa-google"></i> Login
-              </button>
-            )}
 
-            {user && !user.isAnonymous && (
-              <div className="flex items-center gap-2">
-                {user.photoURL && <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-blue-500" />}
-                <span className="text-[10px] font-bold hidden lg:inline max-w-[100px] truncate opacity-60">{user.displayName || user.email}</span>
-              </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Badge / Botão Google Authentication */}
+            {user && !user.isAnonymous ? (
+              <button
+                type="button"
+                onClick={() => setShowSecurityModal(true)}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border-2 transition-all text-left group ${
+                  darkMode ? 'bg-slate-800/80 border-slate-700 hover:border-blue-500/50' : 'bg-slate-100 border-slate-200 hover:border-blue-400'
+                }`}
+                title={`Autenticado como ${user.email} (${user.email === 'gibasuporte@gmail.com' ? 'Admin' : 'Usuário'})`}
+              >
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Avatar" className="w-6 h-6 rounded-lg object-cover border border-emerald-500/50" />
+                ) : (
+                  <div className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-black flex items-center justify-center">
+                    {(user.displayName || user.email || 'G').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="hidden md:flex flex-col text-left">
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <span className="text-[11px] font-black max-w-[120px] truncate">{user.displayName || user.email}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  </div>
+                  <span className="text-[9px] text-slate-400 font-mono font-bold">
+                    {user.email === 'gibasuporte@gmail.com' ? 'Admin Supremo' : 'Google Auth'}
+                  </span>
+                </div>
+              </button>
+            ) : (
+              <button 
+                type="button"
+                onClick={handleGoogleLogin}
+                className={`text-xs font-black px-3 py-2 rounded-xl border-2 transition-all flex items-center gap-2 shadow-sm ${
+                  darkMode ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Entrar com Conta Google corporativa"
+              >
+                <i className="fa-brands fa-google text-red-500 text-sm"></i>
+                <span className="hidden sm:inline">Entrar com Google</span>
+              </button>
             )}
 
             <button 
@@ -880,17 +945,19 @@ const App: React.FC = () => {
             >
               <i className={`fa-solid ${darkMode ? 'fa-sun' : 'fa-moon'}`}></i>
             </button>
+
             <button 
               onClick={() => setShowSecurityModal(true)}
               className={`h-10 rounded-xl px-3 flex items-center justify-center gap-2 border-2 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-blue-600 hover:bg-slate-200'}`}
               title="Configurações de Segurança e Conexão"
             >
               <i className="fa-solid fa-shield-halved"></i>
-              <span className="text-xs font-bold hidden sm:inline">Configurações</span>
+              <span className="text-xs font-bold hidden sm:inline">Segurança</span>
             </button>
+
             <button 
               onClick={openNewForm}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl flex items-center gap-2 font-bold shadow-md active:scale-95"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 h-10 rounded-xl flex items-center gap-2 font-black text-xs sm:text-sm shadow-md active:scale-95 transition-all"
             >
               <i className="fa-solid fa-plus"></i>
               <span className="hidden sm:inline">Novo Item</span>
@@ -1039,7 +1106,8 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Visualização em Lista / Tabela para Desktop */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead className={`text-[11px] uppercase font-black border-b-2 transition-colors ${darkMode ? 'bg-slate-800/50 text-slate-500 border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                 <tr>
@@ -1265,6 +1333,276 @@ const App: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Visualização em Cards Otimizada para Celular (Mobile View) */}
+          <div className="block md:hidden p-3 space-y-3">
+            {loading ? (
+              <div className="py-16 text-center">
+                <div className="animate-spin h-7 w-7 border-2 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+                <p className="text-xs text-slate-400 mt-2 font-bold">Carregando inventário...</p>
+              </div>
+            ) : filteredAssets.map(asset => (
+              <div 
+                key={asset.id} 
+                className={`p-3.5 rounded-2xl border-2 transition-all ${
+                  selectedIds.has(asset.id) 
+                    ? (darkMode ? 'bg-blue-950/20 border-blue-600/60 shadow-md' : 'bg-blue-50/80 border-blue-300 shadow-md')
+                    : (darkMode ? 'bg-slate-800/40 border-slate-700/70 hover:border-slate-600' : 'bg-slate-50/70 border-slate-200 hover:border-slate-300')
+                }`}
+              >
+                {/* Header do Card */}
+                <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-700/40 dark:border-slate-700/60">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      title="Marque para ficha técnica"
+                      checked={selectedIds.has(asset.id)}
+                      onChange={() => toggleSelect(asset.id)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                    <span className={`p-1.5 rounded-lg text-xs font-black shrink-0 ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                      <i className={`fa-solid ${getEquipmentIcon(asset.TipoEquipamento)}`}></i>
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${darkMode ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-white text-slate-700 border border-slate-200'}`}>
+                      {asset.TipoEquipamento}
+                    </span>
+                  </div>
+
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${getStatusBadgeClass(asset.EstadoEquipamento)}`}>
+                    {asset.EstadoEquipamento}
+                  </span>
+                </div>
+
+                {/* Dados Principais do Ativo */}
+                <div className="pt-2.5 pb-2 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-sm font-black text-slate-900 dark:text-white truncate">
+                      {asset.marca} <span className="font-semibold opacity-80">{asset.modelo}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div className="bg-slate-200/50 dark:bg-slate-800/60 px-2.5 py-1.5 rounded-xl border border-slate-300/50 dark:border-slate-700/50">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Patrimônio</span>
+                      <span className="font-mono font-black text-slate-800 dark:text-slate-100">{asset.NumeroPatrimonio}</span>
+                    </div>
+                    <div className="bg-slate-200/50 dark:bg-slate-800/60 px-2.5 py-1.5 rounded-xl border border-slate-300/50 dark:border-slate-700/50">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block">Serial S/N</span>
+                      <span className="font-mono font-bold text-blue-500 truncate block">{asset.serial}</span>
+                    </div>
+                  </div>
+
+                  {/* Situação / Destinação */}
+                  <div className="pt-1">
+                    {asset.situacao === 'Colaborador' ? (
+                      <div className={`p-2 rounded-xl border text-xs flex items-center justify-between gap-2 ${darkMode ? 'bg-blue-950/30 text-blue-300 border-blue-900/50' : 'bg-blue-50 text-blue-800 border-blue-100'}`}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <i className="fa-solid fa-user text-blue-500 text-xs shrink-0"></i>
+                          <span className="font-bold truncate">{asset.colaboradorNome || 'Colaborador'}</span>
+                        </div>
+                        {asset.colaboradorId && (
+                          <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                            ID: {asset.colaboradorId}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 ${darkMode ? 'bg-emerald-950/30 text-emerald-300 border-emerald-900/50' : 'bg-emerald-50 text-emerald-800 border-emerald-100'}`}>
+                        <i className="fa-solid fa-box text-emerald-500 text-xs shrink-0"></i>
+                        <span className="font-bold">Em Estoque</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Registro Fotográfico no Card Mobile */}
+                  <div className="pt-1.5">
+                    {asset.fotos && asset.fotos.length > 0 ? (
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30">
+                        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+                          {asset.fotos.slice(0, 3).map((f, i) => (
+                            <img 
+                              key={i} 
+                              src={f} 
+                              alt="" 
+                              onClick={() => setViewingPhotoAsset(asset)}
+                              className="w-8 h-8 rounded-lg object-cover border border-amber-500/40 cursor-pointer shrink-0" 
+                            />
+                          ))}
+                          {asset.fotos.length > 3 && (
+                            <span className="text-[10px] font-bold text-amber-500 px-1">+{asset.fotos.length - 3}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setViewingPhotoAsset(asset)}
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-sm"
+                        >
+                          <i className="fa-solid fa-camera"></i>
+                          <span>{asset.fotos.length} Foto{asset.fotos.length > 1 ? 's' : ''}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700/70 text-[10px] text-slate-400">
+                        <span className="flex items-center gap-1.5 pl-1">
+                          <i className="fa-solid fa-camera text-slate-400"></i>
+                          Sem fotos anexadas
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingIdPasswordCheck(asset.id);
+                            setEditPasswordInput('');
+                          }}
+                          className="px-2 py-1 rounded-md text-[9px] font-bold uppercase text-blue-500 hover:bg-blue-500/10 transition-colors"
+                        >
+                          + Anexar Foto
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ações Mobile */}
+                <div className="pt-2 border-t border-slate-700/40 dark:border-slate-700/60">
+                  {deletingId === asset.id ? (
+                    <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="password" 
+                          placeholder="Senha (excluiritem)" 
+                          value={deletePassword} 
+                          onChange={(e) => setDeletePassword(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (deletePassword.trim().toLowerCase() === 'excluiritem') {
+                                confirmDelete(asset.id);
+                                setDeletePassword('');
+                              } else {
+                                alert('Senha incorreta! Digite: excluiritem');
+                              }
+                            }
+                          }}
+                          className={`flex-1 px-2.5 py-1.5 text-xs border rounded-xl outline-none text-center font-bold transition-all ${
+                            darkMode 
+                              ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-red-500' 
+                              : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-red-500'
+                          }`}
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            if (deletePassword.trim().toLowerCase() === 'excluiritem') {
+                              confirmDelete(asset.id);
+                              setDeletePassword('');
+                            } else {
+                              alert('Senha incorreta! Digite: excluiritem');
+                            }
+                          }} 
+                          className="bg-red-600 text-white px-3 py-1.5 rounded-xl text-xs font-black uppercase shadow-sm active:scale-95"
+                        >
+                          Confirmar
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setDeletingId(null);
+                            setDeletePassword('');
+                          }} 
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase border transition-colors ${
+                            darkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </div>
+                  ) : editingIdPasswordCheck === asset.id ? (
+                    <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="password" 
+                          placeholder="Senha: editaritem" 
+                          value={editPasswordInput} 
+                          onChange={(e) => setEditPasswordInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (editPasswordInput === 'editaritem') {
+                                handleEdit(asset);
+                                setEditingIdPasswordCheck(null);
+                                setEditPasswordInput('');
+                              } else {
+                                alert('Senha incorreta! Digite: editaritem');
+                              }
+                            }
+                          }}
+                          className={`flex-1 px-2.5 py-1.5 text-xs border rounded-xl outline-none text-center font-bold transition-all ${
+                            darkMode 
+                              ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500' 
+                              : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-blue-500'
+                          }`}
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            if (editPasswordInput === 'editaritem') {
+                              handleEdit(asset);
+                              setEditingIdPasswordCheck(null);
+                              setEditPasswordInput('');
+                            } else {
+                              alert('Senha incorreta! Digite: editaritem');
+                            }
+                          }} 
+                          className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-black uppercase shadow-sm active:scale-95"
+                        >
+                          Editar
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setEditingIdPasswordCheck(null);
+                            setEditPasswordInput('');
+                          }} 
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase border transition-colors ${
+                            darkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setEditingIdPasswordCheck(asset.id);
+                          setEditPasswordInput('');
+                          setDeletingId(null);
+                        }} 
+                        className="px-3 py-1.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <i className="fa-solid fa-pencil text-[10px]"></i>
+                        <span>Editar</span>
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setDeletingId(asset.id);
+                          setDeletePassword('');
+                          setEditingIdPasswordCheck(null);
+                        }} 
+                        className="px-3 py-1.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 text-xs font-bold flex items-center gap-1.5 active:scale-95"
+                      >
+                        <i className="fa-solid fa-trash text-[10px]"></i>
+                        <span>Excluir</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
           
           {!loading && filteredAssets.length === 0 && (
@@ -1749,14 +2087,14 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Seção de Registro Fotográfico de Equipamentos Danificados / Avarias / Laudo */}
-                <div className={`md:col-span-2 p-4 rounded-2xl border-2 transition-all ${
+                <div className={`md:col-span-2 p-3 sm:p-4 rounded-2xl border-2 transition-all ${
                   formData.EstadoEquipamento === 'DANIFICADO'
                     ? (darkMode ? 'bg-red-950/25 border-red-800/60' : 'bg-red-50 border-red-200')
                     : (darkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200')
                 }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black transition-colors ${
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black transition-colors shrink-0 ${
                         formData.EstadoEquipamento === 'DANIFICADO' 
                           ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
                           : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
@@ -1769,7 +2107,7 @@ const App: React.FC = () => {
                         }`}>
                           Registro Fotográfico {formData.EstadoEquipamento === 'DANIFICADO' ? 'de Avarias / Defeito' : 'do Ativo'}
                         </label>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold leading-tight">
                           {formData.EstadoEquipamento === 'DANIFICADO' 
                             ? '⚠️ Equipamento Danificado: Tire fotos para comprovação e laudo técnico do patrimônio.' 
                             : 'Anexe fotos para comprovar o estado ou etiquetas do equipamento.'}
@@ -1777,15 +2115,16 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                       <button
                         type="button"
                         onClick={() => setShowPhotoCaptureModal(true)}
-                        className={`px-3.5 py-2 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-md transition-all border-b-2 ${
+                        className={`flex-1 sm:flex-initial px-3.5 py-2.5 sm:py-2 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all border-b-2 ${
                           formData.EstadoEquipamento === 'DANIFICADO'
                             ? 'bg-red-500 hover:bg-red-400 border-red-700 text-white'
                             : 'bg-amber-500 hover:bg-amber-400 border-amber-600'
                         }`}
+                        title="Tirar foto com a câmera"
                       >
                         <i className="fa-solid fa-camera"></i>
                         <span>Tirar Foto</span>
@@ -1793,9 +2132,23 @@ const App: React.FC = () => {
 
                       <button
                         type="button"
+                        onClick={() => directCameraInputRef.current?.click()}
+                        className={`px-3 py-2.5 sm:py-2 border-2 font-bold text-xs uppercase rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                          darkMode 
+                            ? 'border-slate-700 bg-slate-800 text-amber-400 hover:bg-slate-700' 
+                            : 'border-slate-300 bg-white text-amber-600 hover:bg-slate-100'
+                        }`}
+                        title="Abrir câmera nativa do smartphone"
+                      >
+                        <i className="fa-solid fa-mobile-screen"></i>
+                        <span>Celular</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => photoUploadInputRef.current?.click()}
                         disabled={isProcessingPhoto}
-                        className={`px-3 py-2 border-2 font-bold text-xs uppercase rounded-xl flex items-center gap-1.5 transition-all ${
+                        className={`px-3 py-2.5 sm:py-2 border-2 font-bold text-xs uppercase rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
                           darkMode 
                             ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' 
                             : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
@@ -1803,7 +2156,7 @@ const App: React.FC = () => {
                         title="Carregar fotos da galeria ou disco"
                       >
                         <i className="fa-solid fa-folder-open text-xs"></i>
-                        <span className="hidden xs:inline">Galeria</span>
+                        <span>Galeria</span>
                       </button>
 
                       <input
@@ -1814,16 +2167,25 @@ const App: React.FC = () => {
                         onChange={handleFormPhotoUpload}
                         className="hidden"
                       />
+
+                      <input
+                        ref={directCameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFormPhotoUpload}
+                        className="hidden"
+                      />
                     </div>
                   </div>
 
                   {/* Lista de Fotos Anexadas */}
                   {formData.fotos && formData.fotos.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 mt-3">
                       {formData.fotos.map((foto, idx) => (
                         <div 
                           key={idx} 
-                          className="relative group rounded-xl overflow-hidden border-2 border-slate-700/60 aspect-video sm:aspect-square bg-slate-950 shadow-sm"
+                          className="relative group rounded-xl overflow-hidden border-2 border-slate-700/60 aspect-square bg-slate-950 shadow-sm"
                         >
                           <img src={foto} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
@@ -1851,15 +2213,23 @@ const App: React.FC = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className={`p-4 rounded-xl border-2 border-dashed text-center text-xs font-medium transition-colors ${
-                      formData.EstadoEquipamento === 'DANIFICADO'
-                        ? (darkMode ? 'border-red-900/40 text-red-400 bg-red-950/20' : 'border-red-200 text-red-700 bg-white/60')
-                        : (darkMode ? 'border-slate-700 text-slate-500 bg-slate-900/20' : 'border-slate-200 text-slate-400 bg-white/60')
-                    }`}>
-                      <i className="fa-solid fa-camera-retro text-lg mb-1 block opacity-60"></i>
-                      {formData.EstadoEquipamento === 'DANIFICADO' 
-                        ? 'Nenhuma foto anexada. Recomenda-se tirar foto da avaria para gravar no laudo do banco de dados.' 
-                        : 'Nenhuma foto anexada a este cadastro.'}
+                    <div 
+                      onClick={() => setShowPhotoCaptureModal(true)}
+                      className={`p-4 rounded-xl border-2 border-dashed text-center text-xs font-medium transition-all cursor-pointer hover:opacity-90 active:scale-[0.99] ${
+                        formData.EstadoEquipamento === 'DANIFICADO'
+                          ? (darkMode ? 'border-red-900/40 text-red-400 bg-red-950/20' : 'border-red-200 text-red-700 bg-white/60')
+                          : (darkMode ? 'border-slate-700 text-slate-400 bg-slate-900/20 hover:border-amber-500/50' : 'border-slate-300 text-slate-500 bg-white/60 hover:border-amber-500/50')
+                      }`}
+                    >
+                      <i className="fa-solid fa-camera-retro text-2xl mb-1.5 block opacity-70 text-amber-500"></i>
+                      <p className="font-bold text-slate-700 dark:text-slate-200">
+                        {formData.EstadoEquipamento === 'DANIFICADO' 
+                          ? '⚠️ Nenhuma foto anexada. Toque aqui para tirar foto da avaria para o laudo.' 
+                          : 'Nenhuma foto anexada a este cadastro. Toque para tirar ou escolher foto.'}
+                      </p>
+                      <span className="text-[10px] text-slate-400 block mt-1">
+                        Compatível com câmera do celular e fotos salvas na galeria
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1967,107 +2337,21 @@ const App: React.FC = () => {
         </div>
       )}
       
-      {showSecurityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-250">
-          <div className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border-2 transition-colors ${darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-            <div className={`px-6 py-4 border-b-2 flex justify-between items-center transition-colors ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-              <h2 className="text-md font-black flex items-center gap-2"><i className="fa-solid fa-shield-halved text-blue-500 text-lg"></i> Segurança e Conexão</h2>
-              <button onClick={() => setShowSecurityModal(false)} className="opacity-50 hover:opacity-100 transition-opacity"><i className="fa-solid fa-xmark text-xl"></i></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Seção 1: Modo de Armazenamento */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Modo de Armazenamento</label>
-                <p className="text-xs opacity-60">Escolha onde guardar os dados do inventário. O modo local é autônomo, não usa rede externa e roda sem falhas no GitHub Pages.</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => setStorageMode('cloud')}
-                    className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-2 transition-all ${storageMode === 'cloud' ? 'border-green-500 bg-green-500/10 text-green-500' : (darkMode ? 'border-slate-700 hover:bg-slate-800 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-500')}`}
-                  >
-                    <i className="fa-solid fa-cloud text-lg"></i>
-                    <span>Nuvem (Firebase)</span>
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setStorageMode('local')}
-                    className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-2 transition-all ${storageMode === 'local' ? 'border-amber-500 bg-amber-500/10 text-amber-500' : (darkMode ? 'border-slate-700 hover:bg-slate-800 text-slate-400' : 'border-slate-200 hover:bg-slate-50 text-slate-500')}`}
-                  >
-                    <i className="fa-solid fa-box-archive text-lg"></i>
-                    <span>Local (IndexedDB)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Seção 2: Chave Gemini */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Chave de API do Gemini (AI Studio)</label>
-                <p className="text-xs opacity-60">
-                  Insira sua chave pessoal do Gemini para rodar OCR estilo Google Lens do leitor de ativos e consultas de especificações de hardware. Em ambientes estáticos como o GitHub Pages, ela é obrigatória para usar as funções de Inteligência Artificial de forma independente.
-                </p>
-                <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition-colors ${darkMode ? 'bg-purple-950/20 border-purple-900/50 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-800'}`}>
-                  <span className="font-semibold"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i> Obtenha uma chave grátis:</span>
-                  <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="underline font-bold text-blue-500 hover:text-blue-600 flex items-center gap-1">
-                    Google AI Studio <i className="fa-solid fa-up-right-from-square text-[10px]"></i>
-                  </a>
-                </div>
-                <div className="relative">
-                  <input 
-                    type={showApiKey ? "text" : "password"}
-                    placeholder="Cole sua GEMINI_API_KEY do Google AI Studio..."
-                    value={localGeminiKey}
-                    onChange={e => setLocalGeminiKey(e.target.value)}
-                    className={`w-full border-2 rounded-xl pl-4 pr-10 py-2.5 outline-none font-mono text-xs focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500"
-                    title={showApiKey ? "Ocultar Chave" : "Exibir Chave"}
-                  >
-                    <i className={`fa-solid ${showApiKey ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                  </button>
-                </div>
-                <div className={`p-3 rounded-lg border text-[10px] leading-relaxed transition-colors ${darkMode ? 'bg-blue-950/20 border-blue-900/50 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-                  <i className="fa-solid fa-shield-halved mr-1"></i>
-                  <strong>Garantia de Privacidade:</strong> Sua chave é armazenada unicamente na memória de cache do seu navegador (localStorage) e usada de forma direta pelo browser para falar com o Gemini oficial. Ela nunca é enviada a outros servidores de terceiros.
-                </div>
-              </div>
-
-              {/* Seção 3: Credenciais Personalizadas Firebase */}
-              <div className="space-y-2">
-                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Firebase Configuração Personalizada (Opcional)</label>
-                <p className="text-xs opacity-60">Se você fez um fork do código e deseja rodar sua própria nuvem dedicada no GitHub Pages, cole o objeto de configuração Web do Firebase (JSON):</p>
-                <textarea 
-                  placeholder='{ "apiKey": "AIzaSy...", "projectId": "...", "appId": "...", "firestoreDatabaseId": "..." }'
-                  value={customFirebaseConfig}
-                  onChange={e => setCustomFirebaseConfig(e.target.value)}
-                  rows={4}
-                  className={`w-full border-2 rounded-xl p-3 outline-none font-mono text-xs focus:border-blue-500 transition-all ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
-                />
-              </div>
-            </div>
-
-            <div className={`p-4 border-t-2 flex gap-3 transition-colors ${darkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-              <button 
-                type="button"
-                onClick={handleSaveSecurity}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black py-3.5 rounded-xl shadow-lg active:scale-95 transition-all"
-              >
-                Salvar Configurações
-              </button>
-              <button 
-                type="button"
-                onClick={() => setShowSecurityModal(false)}
-                className={`px-4 py-3 border-2 text-xs font-black rounded-xl transition-all ${darkMode ? 'border-slate-700 text-slate-400 hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-white'}`}
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SecurityModal
+        isOpen={showSecurityModal}
+        onClose={() => setShowSecurityModal(false)}
+        darkMode={darkMode}
+        user={user}
+        storageMode={storageMode}
+        setStorageMode={setStorageMode}
+        localGeminiKey={localGeminiKey}
+        setLocalGeminiKey={setLocalGeminiKey}
+        customFirebaseConfig={customFirebaseConfig}
+        setCustomFirebaseConfig={setCustomFirebaseConfig}
+        onSaveSecurity={handleSaveSecurity}
+        onGoogleLogin={handleGoogleLogin}
+        onGoogleLogout={handleGoogleLogout}
+      />
 
       <footer className={`p-8 text-center text-[10px] font-black uppercase tracking-[0.4em] mt-auto transition-colors border-t-2 ${darkMode ? 'text-slate-700 border-slate-900' : 'text-slate-300 border-slate-100'}`}>
         AssetTrack QR • {storageMode === 'cloud' ? 'Sincronização Nuvem Ativa' : 'Modo Estático Local'} • {new Date().getFullYear()}

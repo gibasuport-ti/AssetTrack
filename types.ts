@@ -1,4 +1,3 @@
-
 export interface Asset {
   id: string;
   DataAquisicao: string;
@@ -28,4 +27,24 @@ export enum EquipmentType {
   TABLET = 'TABLET',
   MONITOR = 'MONITOR',
   OUTRO = 'OUTRO'
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'LOGIN' | 'IMPORT';
+  userEmail: string;
+  userName: string;
+  userId: string;
+  details: string;
+  assetSerial?: string;
+  assetPatrimonio?: string;
+}
+
+export interface SecurityConfig {
+  restrictAccessToGoogle: boolean;
+  allowedEmails: string[];
+  allowedDomains: string[];
+  autoLogoutMinutes: number;
+  enableAuditLogs: boolean;
 }
