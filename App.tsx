@@ -1146,20 +1146,21 @@ const App: React.FC = () => {
                         <div className="flex flex-col sm:flex-row items-center justify-end gap-2 animate-in slide-in-from-right-2 duration-200">
                           <input 
                             type="password" 
-                            placeholder="Senha" 
+                            placeholder="Senha (excluiritem)" 
                             value={deletePassword} 
                             onChange={(e) => setDeletePassword(e.target.value)}
+                            autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 if (deletePassword === 'excluiritem') {
                                   confirmDelete(asset.id);
                                   setDeletePassword('');
                                 } else {
-                                  alert('Senha incorreta!');
+                                  alert('Senha incorreta! Digite: excluiritem');
                                 }
                               }
                             }}
-                            className={`px-2 py-1 text-xs border rounded-lg outline-none w-32 md:w-36 text-center font-bold transition-all shrink-0 ${
+                            className={`px-2 py-1 text-xs border rounded-lg outline-none w-36 md:w-40 text-center font-bold transition-all shrink-0 ${
                               darkMode 
                                 ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-red-500' 
                                 : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-red-500'
@@ -1171,12 +1172,12 @@ const App: React.FC = () => {
                                 confirmDelete(asset.id);
                                 setDeletePassword('');
                               } else {
-                                alert('Senha incorreta!');
+                                alert('Senha incorreta! Digite: excluiritem');
                               }
                             }} 
                             className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm cursor-pointer whitespace-nowrap shrink-0 hover:bg-red-700 transition-colors"
                           >
-                            Confirmar
+                            Excluir
                           </button>
                           <button 
                             onClick={() => {
