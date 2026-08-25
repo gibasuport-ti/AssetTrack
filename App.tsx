@@ -4,6 +4,9 @@ import { assetService } from './services/assetService';
 import { geminiService } from './services/geminiService';
 import { Asset, AssetFormData, EquipmentType } from './types';
 import BarcodeScanner from './components/BarcodeScanner';
+import { PhotoCaptureModal } from './components/PhotoCaptureModal';
+import { PhotoViewerModal } from './components/PhotoViewerModal';
+import { compressImage } from './services/imageUtils';
 import * as XLSX from 'xlsx';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, User } from 'firebase/auth';
@@ -324,6 +327,13 @@ const App: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const serialInputRef = useRef<HTMLInputElement>(null);
+  const photoUploadInputRef = useRef<HTMLInputElement>(null);
+
+  // Estados para Fotos e Evidências Fotográficas
+  const [showPhotoCaptureModal, setShowPhotoCaptureModal] = useState(false);
+  const [viewingPhotoAsset, setViewingPhotoAsset] = useState<Asset | null>(null);
+  const [viewingSinglePhoto, setViewingSinglePhoto] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
 
   const getInitialForm = (): AssetFormData => ({
     DataAquisicao: getBrasiliaDateString(),
@@ -337,10 +347,51 @@ const App: React.FC = () => {
     situacao: 'Estoque',
     colaboradorId: '',
     colaboradorNome: '',
-    colaboradorEmail: ''
+    colaboradorEmail: '',
+    fotos: []
   });
 
   const [formData, setFormData] = useState<AssetFormData>(getInitialForm());
+
+  const handlePhotoCaptured = (base64: string) => {
+    setFormData(prev => ({
+      ...prev,
+      fotos: [...(prev.fotos || []), base64]
+    }));
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      fotos: (prev.fotos || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleFormPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessingPhoto(true);
+    try {
+      const compressedList: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].type.startsWith('image/')) {
+          const comp = await compressImage(files[i], 1000, 1000, 0.78);
+          compressedList.push(comp);
+        }
+      }
+      setFormData(prev => ({
+        ...prev,
+        fotos: [...(prev.fotos || []), ...compressedList].slice(0, 6)
+      }));
+    } catch (err) {
+      console.error('Erro ao processar imagens:', err);
+      alert('Erro ao processar as fotos selecionadas.');
+    } finally {
+      setIsProcessingPhoto(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -493,7 +544,8 @@ const App: React.FC = () => {
           observacao: '',
           colaboradorId: '',
           colaboradorNome: '',
-          colaboradorEmail: ''
+          colaboradorEmail: '',
+          fotos: []
         }));
         
         setTimeout(() => {
@@ -535,7 +587,8 @@ const App: React.FC = () => {
       situacao: asset.situacao || 'Estoque',
       colaboradorId: asset.colaboradorId || '',
       colaboradorNome: asset.colaboradorNome || '',
-      colaboradorEmail: asset.colaboradorEmail || ''
+      colaboradorEmail: asset.colaboradorEmail || '',
+      fotos: asset.fotos || []
     });
     setShowForm(true);
   };
@@ -591,25 +644,100 @@ const App: React.FC = () => {
     return str;
   };
 
-  const exportToExcel = () => {
-    if (filteredAssets.length === 0) return alert('Sem dados para exportar.');
-    const worksheet = XLSX.utils.json_to_sheet(filteredAssets.map(a => ({
+  const getExportData = () => {
+    return filteredAssets.map(a => ({
       'Patrimônio': sanitizeSpreadsheetCell(a.NumeroPatrimonio),
       'Equipamento': sanitizeSpreadsheetCell(a.TipoEquipamento),
       'Marca': sanitizeSpreadsheetCell(a.marca),
       'Modelo': sanitizeSpreadsheetCell(a.modelo),
       'Serial': sanitizeSpreadsheetCell(a.serial),
       'Estado': sanitizeSpreadsheetCell(a.EstadoEquipamento),
+      'Fotos Anexadas': a.fotos && a.fotos.length > 0 ? `${a.fotos.length} foto(s)` : 'Nenhuma',
       'Situação': sanitizeSpreadsheetCell(a.situacao || 'Estoque'),
       'ID Colaborador': sanitizeSpreadsheetCell(a.colaboradorId || ''),
       'Nome Colaborador': sanitizeSpreadsheetCell(a.colaboradorNome || ''),
       'E-mail Colaborador': sanitizeSpreadsheetCell(a.colaboradorEmail || ''),
       'Observação': sanitizeSpreadsheetCell(a.observacao),
       'Data': sanitizeSpreadsheetCell(a.DataAquisicao)
-    })));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventário");
-    XLSX.writeFile(workbook, `Inventario_${getBrasiliaDateString()}.xlsx`);
+    }));
+  };
+
+  const exportToExcel = () => {
+    if (filteredAssets.length === 0) return alert('Sem dados para exportar.');
+    try {
+      const data = getExportData();
+      const worksheet = XLSX.utils.json_to_sheet(data);
+
+      // Ajusta largura automática das colunas para visualização perfeita no Excel
+      const colWidths = [
+        { wch: 16 }, // Patrimônio
+        { wch: 18 }, // Equipamento
+        { wch: 16 }, // Marca
+        { wch: 22 }, // Modelo
+        { wch: 20 }, // Serial
+        { wch: 14 }, // Estado
+        { wch: 16 }, // Fotos Anexadas
+        { wch: 16 }, // Situação
+        { wch: 16 }, // ID Colaborador
+        { wch: 26 }, // Nome Colaborador
+        { wch: 28 }, // E-mail Colaborador
+        { wch: 35 }, // Observação
+        { wch: 14 }, // Data
+      ];
+      worksheet['!cols'] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Inventário");
+
+      // Gera buffer binário XLSX e dispara download seguro via Blob
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+
+      const now = new Date();
+      const timeStamp = `${getBrasiliaDateString()}_${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m${String(now.getSeconds()).padStart(2, '0')}s`;
+      const fileName = `Inventario_${timeStamp}.xlsx`;
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      console.error('Erro ao exportar Excel:', err);
+      alert('Erro ao gerar a planilha Excel. Tente novamente.');
+    }
+  };
+
+  const exportToCSV = () => {
+    if (filteredAssets.length === 0) return alert('Sem dados para exportar.');
+    try {
+      const data = getExportData();
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+
+      // Adiciona BOM UTF-8 (\uFEFF) para acentos abrirem perfeitos no Excel
+      const blob = new Blob(['\uFEFF' + csvOutput], { type: 'text/csv;charset=utf-8;' });
+      const now = new Date();
+      const timeStamp = `${getBrasiliaDateString()}_${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}m${String(now.getSeconds()).padStart(2, '0')}s`;
+      const fileName = `Inventario_${timeStamp}.csv`;
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      console.error('Erro ao exportar CSV:', err);
+      alert('Erro ao gerar o arquivo CSV.');
+    }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -638,6 +766,7 @@ const App: React.FC = () => {
             colaboradorNome: String(row['Nome Colaborador'] || row['colaboradorNome'] || '').trim().slice(0, 150),
             colaboradorEmail: String(row['E-mail Colaborador'] || row['colaboradorEmail'] || '').trim().slice(0, 150),
             observacao: String(row['Observação'] || row['observacao'] || '').trim().slice(0, 2000),
+            fotos: Array.isArray(row.fotos) ? row.fotos.slice(0, 6) : [],
             DataAquisicao: String(row['Data'] || row['DataAquisicao'] || getBrasiliaDateString()).trim().slice(0, 50),
             id: (row['id'] ? String(row['id']) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36)).slice(0, 128),
             createdAt: row['createdAt'] ? String(row['createdAt']).slice(0, 50) : new Date().toISOString()
@@ -658,6 +787,7 @@ const App: React.FC = () => {
               colaboradorNome: String(row.colaboradorNome || '').trim().slice(0, 150),
               colaboradorEmail: String(row.colaboradorEmail || '').trim().slice(0, 150),
               observacao: String(row.observacao || '').trim().slice(0, 2000),
+              fotos: Array.isArray(row.fotos) ? row.fotos.slice(0, 6) : [],
               DataAquisicao: String(row.DataAquisicao || getBrasiliaDateString()).trim().slice(0, 50),
               id: (row.id ? String(row.id) : Math.random().toString(36).substring(2, 11) + Date.now().toString(36)).slice(0, 128),
               createdAt: row.createdAt ? String(row.createdAt).slice(0, 50) : new Date().toISOString()
@@ -871,8 +1001,38 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={exportToExcel} className="p-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-bold flex items-center gap-2 cursor-pointer"><i className="fa-solid fa-file-excel"></i> Exportar</button>
-                <button onClick={() => fileInputRef.current?.click()} className={`p-2.5 border-2 rounded-lg text-xs font-bold flex items-center gap-2 cursor-pointer ${darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}><i className="fa-solid fa-file-import"></i> Importar</button>
+                <button 
+                  onClick={exportToExcel} 
+                  className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-2 cursor-pointer shadow-sm transition-all active:scale-95"
+                  title="Exportar planilha Excel formatada (.xlsx)"
+                >
+                  <i className="fa-solid fa-file-excel text-sm"></i>
+                  <span>Excel (.xlsx)</span>
+                </button>
+                <button 
+                  onClick={exportToCSV} 
+                  className={`p-2.5 border-2 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                    darkMode 
+                      ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' 
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Exportar dados em formato CSV universal (.csv)"
+                >
+                  <i className="fa-solid fa-file-csv text-sm text-blue-500"></i>
+                  <span>CSV</span>
+                </button>
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className={`p-2.5 border-2 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                    darkMode 
+                      ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' 
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                  title="Importar planilha ou backup"
+                >
+                  <i className="fa-solid fa-file-import text-sm text-amber-500"></i>
+                  <span>Importar</span>
+                </button>
                 <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json,.xlsx,.xls" />
               </div>
             </div>
@@ -934,9 +1094,22 @@ const App: React.FC = () => {
                     </td>
                     <td className="px-3 sm:px-4 md:px-6 py-3 text-sm font-mono font-bold">{asset.NumeroPatrimonio}</td>
                     <td className="px-3 sm:px-4 md:px-6 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-colors ${getStatusBadgeClass(asset.EstadoEquipamento)}`}>
-                        {asset.EstadoEquipamento}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase transition-colors ${getStatusBadgeClass(asset.EstadoEquipamento)}`}>
+                          {asset.EstadoEquipamento}
+                        </span>
+                        {asset.fotos && asset.fotos.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setViewingPhotoAsset(asset)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 active:scale-95 transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                            title="Clique para visualizar fotos do equipamento"
+                          >
+                            <i className="fa-solid fa-camera text-[9px]"></i>
+                            <span>{asset.fotos.length} foto{asset.fotos.length > 1 ? 's' : ''}</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 sm:px-4 md:px-6 py-3">
                       {asset.situacao === 'Colaborador' ? (
@@ -1572,6 +1745,122 @@ const App: React.FC = () => {
                   )}
                 </div>
 
+                {/* Seção de Registro Fotográfico de Equipamentos Danificados / Avarias / Laudo */}
+                <div className={`md:col-span-2 p-4 rounded-2xl border-2 transition-all ${
+                  formData.EstadoEquipamento === 'DANIFICADO'
+                    ? (darkMode ? 'bg-red-950/25 border-red-800/60' : 'bg-red-50 border-red-200')
+                    : (darkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200')
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black transition-colors ${
+                        formData.EstadoEquipamento === 'DANIFICADO' 
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        <i className="fa-solid fa-camera"></i>
+                      </div>
+                      <div>
+                        <label className={`block text-[11px] font-black uppercase tracking-wider ${
+                          formData.EstadoEquipamento === 'DANIFICADO' ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'
+                        }`}>
+                          Registro Fotográfico {formData.EstadoEquipamento === 'DANIFICADO' ? 'de Avarias / Defeito' : 'do Ativo'}
+                        </label>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                          {formData.EstadoEquipamento === 'DANIFICADO' 
+                            ? '⚠️ Equipamento Danificado: Tire fotos para comprovação e laudo técnico do patrimônio.' 
+                            : 'Anexe fotos para comprovar o estado ou etiquetas do equipamento.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setShowPhotoCaptureModal(true)}
+                        className={`px-3.5 py-2 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-md transition-all border-b-2 ${
+                          formData.EstadoEquipamento === 'DANIFICADO'
+                            ? 'bg-red-500 hover:bg-red-400 border-red-700 text-white'
+                            : 'bg-amber-500 hover:bg-amber-400 border-amber-600'
+                        }`}
+                      >
+                        <i className="fa-solid fa-camera"></i>
+                        <span>Tirar Foto</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => photoUploadInputRef.current?.click()}
+                        disabled={isProcessingPhoto}
+                        className={`px-3 py-2 border-2 font-bold text-xs uppercase rounded-xl flex items-center gap-1.5 transition-all ${
+                          darkMode 
+                            ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700' 
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                        }`}
+                        title="Carregar fotos da galeria ou disco"
+                      >
+                        <i className="fa-solid fa-folder-open text-xs"></i>
+                        <span className="hidden xs:inline">Galeria</span>
+                      </button>
+
+                      <input
+                        ref={photoUploadInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFormPhotoUpload}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lista de Fotos Anexadas */}
+                  {formData.fotos && formData.fotos.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                      {formData.fotos.map((foto, idx) => (
+                        <div 
+                          key={idx} 
+                          className="relative group rounded-xl overflow-hidden border-2 border-slate-700/60 aspect-video sm:aspect-square bg-slate-950 shadow-sm"
+                        >
+                          <img src={foto} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
+                            <button
+                              type="button"
+                              onClick={() => setViewingSinglePhoto(foto)}
+                              className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-lg transition-transform active:scale-90"
+                              title="Ampliar foto"
+                            >
+                              <i className="fa-solid fa-magnifying-glass-plus text-xs"></i>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(idx)}
+                              className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg transition-transform active:scale-90"
+                              title="Remover foto"
+                            >
+                              <i className="fa-solid fa-trash text-xs"></i>
+                            </button>
+                          </div>
+                          <span className="absolute bottom-1.5 left-1.5 bg-black/75 backdrop-blur-sm text-white text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
+                            Foto {idx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={`p-4 rounded-xl border-2 border-dashed text-center text-xs font-medium transition-colors ${
+                      formData.EstadoEquipamento === 'DANIFICADO'
+                        ? (darkMode ? 'border-red-900/40 text-red-400 bg-red-950/20' : 'border-red-200 text-red-700 bg-white/60')
+                        : (darkMode ? 'border-slate-700 text-slate-500 bg-slate-900/20' : 'border-slate-200 text-slate-400 bg-white/60')
+                    }`}>
+                      <i className="fa-solid fa-camera-retro text-lg mb-1 block opacity-60"></i>
+                      {formData.EstadoEquipamento === 'DANIFICADO' 
+                        ? 'Nenhuma foto anexada. Recomenda-se tirar foto da avaria para gravar no laudo do banco de dados.' 
+                        : 'Nenhuma foto anexada a este cadastro.'}
+                    </div>
+                  )}
+                </div>
+
                 <div className="md:col-span-2">
                   <label className="block text-[11px] font-black text-slate-500 mb-1.5 uppercase tracking-wider">Observação / Defeitos</label>
                   <textarea 
@@ -1626,6 +1915,54 @@ const App: React.FC = () => {
       )}
 
       {showScanner && <BarcodeScanner onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
+      
+      {showPhotoCaptureModal && (
+        <PhotoCaptureModal
+          onPhotoCaptured={handlePhotoCaptured}
+          onClose={() => setShowPhotoCaptureModal(false)}
+          title={formData.EstadoEquipamento === 'DANIFICADO' ? "Foto de Avaria / Dano do Equipamento" : "Foto do Equipamento"}
+          subtitle={formData.EstadoEquipamento === 'DANIFICADO' ? "Enquadre a parte avariada ou danificada do patrimônio para laudo técnico" : "Enquadre o equipamento ou etiqueta para registro no inventário"}
+        />
+      )}
+
+      {viewingPhotoAsset && (
+        <PhotoViewerModal
+          asset={viewingPhotoAsset}
+          onClose={() => setViewingPhotoAsset(null)}
+        />
+      )}
+
+      {viewingSinglePhoto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in"
+          onClick={() => setViewingSinglePhoto(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <img 
+              src={viewingSinglePhoto} 
+              alt="Visualização da foto" 
+              className="max-h-[80vh] max-w-full rounded-2xl object-contain border border-slate-700 shadow-2xl" 
+            />
+            <div className="mt-4 flex items-center gap-3">
+              <a
+                href={viewingSinglePhoto}
+                download="foto_equipamento.jpg"
+                onClick={(e) => e.stopPropagation()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg"
+              >
+                <i className="fa-solid fa-download"></i> Baixar Imagem
+              </a>
+              <button
+                type="button"
+                onClick={() => setViewingSinglePhoto(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-2"
+              >
+                <i className="fa-solid fa-xmark"></i> Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {showSecurityModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-250">

@@ -17,6 +17,7 @@
         "colaboradorId": { "type": "string", "maxLength": 100 },
         "colaboradorNome": { "type": "string", "maxLength": 150 },
         "colaboradorEmail": { "type": "string", "maxLength": 150 },
+        "fotos": { "type": "array", "items": { "type": "string" }, "maxItems": 6 },
         "observacao": { "type": "string", "maxLength": 2000 },
         "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
         "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 },

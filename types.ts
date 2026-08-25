@@ -16,6 +16,7 @@ export interface Asset {
   colaboradorId?: string;
   colaboradorNome?: string;
   colaboradorEmail?: string;
+  fotos?: string[];
 }
 
 export type AssetFormData = Omit<Asset, 'id' | 'createdAt'>;
