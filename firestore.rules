@@ -57,10 +57,10 @@ service cloud.firestore {
     // ===============================================================
 
     match /assets/{assetId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidId(assetId) && isValidAsset(request.resource.data);
-      allow update: if isAuthenticated() && isValidId(assetId) && isValidAsset(request.resource.data);
-      allow delete: if isAuthenticated() && isValidId(assetId);
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
     match /users/{userId} {

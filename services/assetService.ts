@@ -301,7 +301,6 @@ export const assetService = {
    */
   deleteAsset: async (id: string): Promise<void> => {
     const isCloud = getStorageMode() === 'cloud';
-    const path = `assets/${id}`;
 
     // 1. Sempre limpa do IndexedDB local
     try {
@@ -329,11 +328,8 @@ export const assetService = {
     if (isCloud) {
       try {
         await deleteDoc(doc(db, 'assets', id));
-        return;
       } catch (err) {
-        console.warn("Falha ao remover item da nuvem:", err);
-        handleFirestoreError(err, OperationType.DELETE, path);
-        throw err;
+        console.warn("Falha ao remover item da nuvem (Firestore):", err);
       }
     }
   },

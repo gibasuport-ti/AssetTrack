@@ -1152,7 +1152,7 @@ const App: React.FC = () => {
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                if (deletePassword === 'excluiritem') {
+                                if (deletePassword.trim().toLowerCase() === 'excluiritem') {
                                   confirmDelete(asset.id);
                                   setDeletePassword('');
                                 } else {
@@ -1167,8 +1167,9 @@ const App: React.FC = () => {
                             }`}
                           />
                           <button 
+                            type="button"
                             onClick={() => {
-                              if (deletePassword === 'excluiritem') {
+                              if (deletePassword.trim().toLowerCase() === 'excluiritem') {
                                 confirmDelete(asset.id);
                                 setDeletePassword('');
                               } else {
