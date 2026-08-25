@@ -1,6 +1,11 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from 'firebase/firestore';
 import defaultFirebaseConfig from '../firebase-applet-config.json';
 
 // Obter a configuração a ser utilizada (personalizada do local ou a padrão)
@@ -22,10 +27,24 @@ if (savedConfig) {
 const apps = getApps();
 const app = apps.length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Inicializa o Firestore com a id da base
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Inicializa o Firestore com resiliência para redes instáveis, firewalls e modo offline
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    }),
+    experimentalAutoDetectLongPolling: true,
+  }, firebaseConfig.firestoreDatabaseId);
+} catch (e) {
+  // Se já estiver inicializado, obtém a instância
+  firestoreInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+export const db = firestoreInstance;
 
 // Inicializa o Auth
 export const auth = getAuth(app);
 
 export default app;
+
