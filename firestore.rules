@@ -3,26 +3,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ===============================================================
-    // DEFAULT DENY: Bloqueio total de acesso público / não autenticado
-    // ===============================================================
+    // Default deny-all catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
     // ===============================================================
-    // Funções Auxiliares de Autenticação & Validação de Administrador
+    // Helper Functions & Security Guards
     // ===============================================================
     
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Acesso administrativo e operacional restrito estritamente a gibasuporte@gmail.com
-    function isVerifiedAdmin() {
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
       return isAuthenticated() && 
-        request.auth.token.email == "gibasuporte@gmail.com" && 
-        request.auth.token.email_verified == true;
+        ((request.auth.token.email == "gibasuporte@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function isValidId(id) {
@@ -51,32 +53,31 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // Regras por Coleção
+    // Collection Rules
     // ===============================================================
 
-    // Ativos do Inventário: Apenas admin autenticado gibasuporte@gmail.com
     match /assets/{assetId} {
-      allow read: if isVerifiedAdmin();
-      allow create: if isVerifiedAdmin() && isValidAsset(request.resource.data);
-      allow update: if isVerifiedAdmin() && isValidAsset(request.resource.data);
-      allow delete: if isVerifiedAdmin();
+      // Requer autenticação (Google Auth ou anônimo autenticado pelo Firebase)
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow update: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow delete: if isAuthenticated();
     }
 
-    // Usuários: Apenas admin autenticado gibasuporte@gmail.com
     match /users/{userId} {
-      allow read, write: if isVerifiedAdmin() && isValidId(userId);
+      allow read: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow write: if isValidId(userId) && (isOwner(userId) || isAdmin());
     }
 
-    // Trilha de Auditoria: Apenas admin autenticado gibasuporte@gmail.com
     match /audit_logs/{logId} {
-      allow read, create: if isVerifiedAdmin();
-      allow update, delete: if isVerifiedAdmin();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
     }
 
-    // Configurações Globais de Segurança: Apenas admin autenticado gibasuporte@gmail.com
     match /security_settings/{settingId} {
-      allow read, write: if isVerifiedAdmin();
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }
-
