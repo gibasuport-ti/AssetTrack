@@ -8,7 +8,6 @@ interface AccessGateProps {
   onLogin: () => Promise<void>;
   onLogout?: () => Promise<void>;
   onBypassOffline?: () => void;
-  onOpenSecurity?: () => void;
 }
 
 export const AccessGate: React.FC<AccessGateProps> = ({
@@ -17,8 +16,7 @@ export const AccessGate: React.FC<AccessGateProps> = ({
   reason,
   onLogin,
   onLogout,
-  onBypassOffline,
-  onOpenSecurity
+  onBypassOffline
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,19 +105,6 @@ export const AccessGate: React.FC<AccessGateProps> = ({
               </>
             )}
           </button>
-
-          {onOpenSecurity && (
-            <button
-              type="button"
-              onClick={onOpenSecurity}
-              className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                darkMode ? 'text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
-              }`}
-            >
-              <i className="fa-solid fa-gear text-[11px]"></i>
-              <span>Configurações de Conexão / Modo Local</span>
-            </button>
-          )}
         </div>
 
         {/* Rodapé de Segurança e Contato */}

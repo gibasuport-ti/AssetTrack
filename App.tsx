@@ -425,24 +425,14 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    try {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-        setIsAuthReady(true);
-        if (currentUser && !currentUser.isAnonymous) {
-          setAuthError(null);
-        }
-      }, (error) => {
-        console.warn("Aviso no monitoramento de autenticação:", error);
-        setIsAuthReady(true);
-      });
-      return () => {
-        if (typeof unsubscribe === 'function') unsubscribe();
-      };
-    } catch (e) {
-      console.warn("Erro ao registrar observer de Auth:", e);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setIsAuthReady(true);
-    }
+      if (currentUser && !currentUser.isAnonymous) {
+        setAuthError(null);
+      }
+    });
+    return () => unsubscribe();
   }, [storageMode]);
 
   const handleGoogleLogin = async () => {
@@ -884,50 +874,15 @@ const App: React.FC = () => {
     setShowForm(true); 
   };
 
-  if (!isAuthReady) {
+  if (isAuthReady && !authCheck.authorized) {
     return (
-      <div className={`min-h-screen flex items-center justify-center p-4 transition-colors ${darkMode ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
-        <div className="text-center space-y-4">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-600/10 border-2 border-blue-500/30 flex items-center justify-center text-2xl text-blue-500 animate-pulse">
-            <i className="fa-solid fa-shield-halved"></i>
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-bold uppercase tracking-wider">AssetTrack QR</h2>
-            <p className="text-xs text-slate-400">Iniciando sistema de patrimônio...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!authCheck.authorized) {
-    return (
-      <>
-        <AccessGate
-          darkMode={darkMode}
-          user={user}
-          reason={authCheck.reason}
-          onLogin={handleGoogleLogin}
-          onLogout={handleGoogleLogout}
-          onOpenSecurity={() => setShowSecurityModal(true)}
-        />
-        <SecurityModal
-          isOpen={showSecurityModal}
-          onClose={() => setShowSecurityModal(false)}
-          darkMode={darkMode}
-          user={user}
-          storageMode={storageMode}
-          setStorageMode={setStorageMode}
-          localGeminiKey={localGeminiKey}
-          setLocalGeminiKey={setLocalGeminiKey}
-          customFirebaseConfig={customFirebaseConfig}
-          setCustomFirebaseConfig={setCustomFirebaseConfig}
-          onSaveSecurity={handleSaveSecurity}
-          onGoogleLogin={handleGoogleLogin}
-          onGoogleLogout={handleGoogleLogout}
-          onSecurityConfigChange={setSecurityConfig}
-        />
-      </>
+      <AccessGate
+        darkMode={darkMode}
+        user={user}
+        reason={authCheck.reason}
+        onLogin={handleGoogleLogin}
+        onLogout={handleGoogleLogout}
+      />
     );
   }
 
