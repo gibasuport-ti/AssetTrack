@@ -17,6 +17,7 @@ interface SecurityModalProps {
   onSaveSecurity: () => void;
   onGoogleLogin: () => Promise<void>;
   onGoogleLogout: () => Promise<void>;
+  onSecurityConfigChange?: (config: SecurityConfig) => void;
 }
 
 export const SecurityModal: React.FC<SecurityModalProps> = ({
@@ -33,6 +34,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
   onSaveSecurity,
   onGoogleLogin,
   onGoogleLogout,
+  onSecurityConfigChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'auth' | 'access' | 'audit' | 'database'>('auth');
   const [securityConfig, setSecurityConfig] = useState<SecurityConfig>(() => securityService.getSecurityConfig());
@@ -82,6 +84,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     };
     setSecurityConfig(updated);
     securityService.saveSecurityConfig(updated);
+    if (onSecurityConfigChange) onSecurityConfigChange(updated);
     setNewEmail('');
   };
 
@@ -96,6 +99,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     };
     setSecurityConfig(updated);
     securityService.saveSecurityConfig(updated);
+    if (onSecurityConfigChange) onSecurityConfigChange(updated);
   };
 
   const handleAddDomain = () => {
@@ -114,6 +118,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     };
     setSecurityConfig(updated);
     securityService.saveSecurityConfig(updated);
+    if (onSecurityConfigChange) onSecurityConfigChange(updated);
     setNewDomain('');
   };
 
@@ -124,6 +129,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     };
     setSecurityConfig(updated);
     securityService.saveSecurityConfig(updated);
+    if (onSecurityConfigChange) onSecurityConfigChange(updated);
   };
 
   const handleToggleRestriction = (value: boolean) => {
@@ -133,6 +139,7 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
     };
     setSecurityConfig(updated);
     securityService.saveSecurityConfig(updated);
+    if (onSecurityConfigChange) onSecurityConfigChange(updated);
   };
 
   const handleLoginClick = async () => {
@@ -279,14 +286,27 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={handleLoginClick}
+                        disabled={isLoggingIn}
+                        className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                          darkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200' : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-700'
+                        }`}
+                        title="Entrar com outro e-mail Google"
+                      >
+                        <i className="fa-brands fa-google text-blue-500"></i>
+                        <span>{isLoggingIn ? 'Aguarde...' : 'Trocar Conta'}</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={onGoogleLogout}
-                        className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                        className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-xs font-black uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1.5"
                       >
                         <i className="fa-solid fa-right-from-bracket"></i>
-                        <span>Sair da Conta</span>
+                        <span>Sair</span>
                       </button>
                     </div>
                   </div>
@@ -315,6 +335,35 @@ export const SecurityModal: React.FC<SecurityModalProps> = ({
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Guia para GitHub Pages / Domínios Autorizados */}
+              <div className={`p-4 rounded-2xl border-2 ${
+                darkMode ? 'bg-slate-800/50 border-slate-700/80 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-xs font-black">
+                    <i className="fa-brands fa-github text-base text-purple-400"></i>
+                    <span>Execução no GitHub Pages / Domínio Externo</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.hostname);
+                      alert(`Domínio "${window.location.hostname}" copiado para a área de transferência!`);
+                    }}
+                    className="text-[10px] font-black bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2.5 py-1 rounded-lg hover:bg-blue-500/20 flex items-center gap-1"
+                  >
+                    <i className="fa-solid fa-copy"></i>
+                    <span>Copiar Domínio</span>
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Para que o botão do Google funcione no GitHub Pages (<code className="font-mono text-blue-400 font-bold">{window.location.hostname}</code>), o endereço precisa constar na lista de domínios autorizados do Firebase:
+                </p>
+                <div className="mt-2 text-[11px] font-mono p-2.5 rounded-xl bg-black/20 text-slate-400 border border-slate-700/40">
+                  Firebase Console → Authentication → Settings → Authorized domains → Adicionar Domínio
+                </div>
               </div>
 
               {/* Boas Práticas de Segurança em Destaque */}

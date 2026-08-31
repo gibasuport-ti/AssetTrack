@@ -9,6 +9,7 @@ import { PhotoCaptureModal } from './components/PhotoCaptureModal';
 import { PhotoViewerModal } from './components/PhotoViewerModal';
 import { SecurityModal } from './components/SecurityModal';
 import { AccessGate } from './components/AccessGate';
+import { UserMenu } from './components/UserMenu';
 import { compressImage } from './services/imageUtils';
 import * as XLSX from 'xlsx';
 import { auth, db } from './services/firebase';
@@ -412,22 +413,23 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
+  // Verifica se há resultado de redirecionamento do Google OAuth na inicialização
   useEffect(() => {
-    if (storageMode === 'local') {
-      setIsAuthReady(true);
-      setUser(null);
-      return;
-    }
+    securityService.checkRedirectResult().then((redirectUser) => {
+      if (redirectUser) {
+        setUser(redirectUser);
+        setAuthError(null);
+        setSecurityConfig(securityService.getSecurityConfig());
+      }
+    }).catch(err => console.error("Erro ao verificar retorno de redirect:", err));
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
-      if (!currentUser) {
+      if (currentUser && !currentUser.isAnonymous) {
         setAuthError(null);
-        // Tenta login anônimo por padrão
-        signInAnonymously(auth).catch(err => {
-          console.error("Erro ao entrar anonimamente:", err);
-          setAuthError("Falha na autenticação automática. Tente entrar com Google.");
-        });
       }
     });
     return () => unsubscribe();
@@ -435,13 +437,14 @@ const App: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
+      setAuthError(null);
       const loggedUser = await securityService.loginWithGoogle();
       setUser(loggedUser);
       setAuthError(null);
       setSecurityConfig(securityService.getSecurityConfig());
     } catch (err: any) {
       console.error("Erro ao entrar com Google:", err);
-      setAuthError(err?.message || "Erro ao entrar com Google. Verifique se popups estão permitidos.");
+      setAuthError(err?.message || "Erro ao autenticar com Google. Verifique popups ou permissão de domínio no Firebase.");
     }
   };
 
@@ -449,6 +452,7 @@ const App: React.FC = () => {
     try {
       await securityService.logout();
       setUser(null);
+      setAuthError(null);
     } catch (err) {
       console.error("Erro ao sair da conta:", err);
     }
@@ -897,41 +901,24 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Badge / Botão Google Authentication */}
+            {/* Badge / Menu de Usuário Google ou Botão de Login */}
             {user && !user.isAnonymous ? (
-              <button
-                type="button"
-                onClick={() => setShowSecurityModal(true)}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border-2 transition-all text-left group ${
-                  darkMode ? 'bg-slate-800/80 border-slate-700 hover:border-blue-500/50' : 'bg-slate-100 border-slate-200 hover:border-blue-400'
-                }`}
-                title={`Autenticado como ${user.email} (${user.email === 'gibasuporte@gmail.com' ? 'Admin' : 'Usuário'})`}
-              >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Avatar" className="w-6 h-6 rounded-lg object-cover border border-emerald-500/50" />
-                ) : (
-                  <div className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-black flex items-center justify-center">
-                    {(user.displayName || user.email || 'G').charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="hidden md:flex flex-col text-left">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <span className="text-[11px] font-black max-w-[120px] truncate">{user.displayName || user.email}</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  </div>
-                  <span className="text-[9px] text-slate-400 font-mono font-bold">
-                    {user.email === 'gibasuporte@gmail.com' ? 'Admin Supremo' : 'Google Auth'}
-                  </span>
-                </div>
-              </button>
+              <UserMenu
+                user={user}
+                darkMode={darkMode}
+                onLogout={handleGoogleLogout}
+                onSwitchAccount={handleGoogleLogin}
+                onOpenSecurity={() => setShowSecurityModal(true)}
+              />
             ) : (
               <button 
                 type="button"
+                id="header-google-login-btn"
                 onClick={handleGoogleLogin}
                 className={`text-xs font-black px-3 py-2 rounded-xl border-2 transition-all flex items-center gap-2 shadow-sm ${
                   darkMode ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'
                 }`}
-                title="Entrar com Conta Google corporativa"
+                title="Entrar com Conta Google oficial"
               >
                 <i className="fa-brands fa-google text-red-500 text-sm"></i>
                 <span className="hidden sm:inline">Entrar com Google</span>
@@ -965,6 +952,43 @@ const App: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Banner de Diagnóstico de Autenticação / Erro de Login */}
+      {authError && (
+        <div className="bg-amber-500/10 border-b-2 border-amber-500/20 text-amber-500 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <i className="fa-solid fa-triangle-exclamation text-base shrink-0"></i>
+              <div>
+                <span className="font-black">Aviso de Autenticação: </span>
+                <span className="font-medium opacity-90">{authError}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.hostname);
+                  alert(`Domínio "${window.location.hostname}" copiado! Adicione-o em Firebase Console > Authentication > Settings > Authorized domains`);
+                }}
+                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 font-black px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[11px] transition-colors"
+                title="Copiar domínio atual para autorizar no Firebase"
+              >
+                <i className="fa-solid fa-copy"></i>
+                <span>Copiar Domínio ({window.location.hostname})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                className="opacity-70 hover:opacity-100 p-1"
+                title="Dispensar aviso"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2351,6 +2375,7 @@ const App: React.FC = () => {
         onSaveSecurity={handleSaveSecurity}
         onGoogleLogin={handleGoogleLogin}
         onGoogleLogout={handleGoogleLogout}
+        onSecurityConfigChange={setSecurityConfig}
       />
 
       <footer className={`p-8 text-center text-[10px] font-black uppercase tracking-[0.4em] mt-auto transition-colors border-t-2 ${darkMode ? 'text-slate-700 border-slate-900' : 'text-slate-300 border-slate-100'}`}>

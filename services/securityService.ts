@@ -12,6 +12,8 @@ import {
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut, 
   User 
 } from 'firebase/auth';
@@ -23,7 +25,7 @@ const SECURITY_CONFIG_KEY = 'assettrack_security_config';
 
 // Configurações Padrão de Segurança
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
-  restrictAccessToGoogle: false,
+  restrictAccessToGoogle: true, // Acesso restrito obrigatório por padrão
   allowedEmails: ['gibasuporte@gmail.com'],
   allowedDomains: [],
   autoLogoutMinutes: 0, // 0 = desativado
@@ -70,24 +72,75 @@ export const securityService = {
     }
   },
 
-  // Autenticação com Google
+  // Autenticação com Google com fallback e diagnóstico detalhado
   loginWithGoogle: async (): Promise<User> => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
       prompt: 'select_account'
     });
-    const result = await signInWithPopup(auth, provider);
-    
-    // Registra auditoria de login
-    await securityService.logAction({
-      action: 'LOGIN',
-      userEmail: result.user.email || 'Anônimo',
-      userName: result.user.displayName || 'Usuário Google',
-      userId: result.user.uid,
-      details: 'Login bem-sucedido via Google OAuth 2.0'
-    });
 
-    return result.user;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      
+      // Registra auditoria de login
+      await securityService.logAction({
+        action: 'LOGIN',
+        userEmail: result.user.email || 'Anônimo',
+        userName: result.user.displayName || 'Usuário Google',
+        userId: result.user.uid,
+        details: 'Login bem-sucedido via Google OAuth 2.0 (Popup)'
+      });
+
+      return result.user;
+    } catch (err: any) {
+      console.warn('Tentativa inicial de login com popup falhou:', err);
+
+      // Tratamento específico para GitHub Pages / domínios não autorizados
+      if (err?.code === 'auth/unauthorized-domain') {
+        const hostname = window.location.hostname;
+        const msg = `O domínio "${hostname}" não está autorizado no Firebase Authentication. Para ativar o login no GitHub Pages, adicione "${hostname}" na lista de Domínios Autorizados no Firebase Console (Authentication > Settings > Authorized domains).`;
+        console.error(msg);
+        throw new Error(msg);
+      }
+
+      // Se o popup foi bloqueado pelo navegador, tenta via redirecionamento
+      if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        try {
+          console.log('Tentando login via redirecionamento (signInWithRedirect)...');
+          await signInWithRedirect(auth, provider);
+          // O redirecionamento recarrega a página
+          throw new Error('Redirecionando para o login do Google...');
+        } catch (redirectErr: any) {
+          if (redirectErr?.code === 'auth/unauthorized-domain') {
+            const hostname = window.location.hostname;
+            throw new Error(`O domínio "${hostname}" não está autorizado no Firebase. Adicione-o em Firebase Console > Authentication > Settings > Authorized domains.`);
+          }
+          throw redirectErr;
+        }
+      }
+
+      throw err;
+    }
+  },
+
+  // Processa o resultado do redirecionamento se houver
+  checkRedirectResult: async (): Promise<User | null> => {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result && result.user) {
+        await securityService.logAction({
+          action: 'LOGIN',
+          userEmail: result.user.email || 'Anônimo',
+          userName: result.user.displayName || 'Usuário Google',
+          userId: result.user.uid,
+          details: 'Login bem-sucedido via Google OAuth 2.0 (Redirect)'
+        });
+        return result.user;
+      }
+    } catch (err: any) {
+      console.error('Erro ao processar resultado do redirecionamento do Google:', err);
+    }
+    return null;
   },
 
   // Logout seguro
