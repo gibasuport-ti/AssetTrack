@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coletor qrcode - Controle de Ativos | Cirion Technologies</title>
+    <meta name="description" content="Sistema corporativo interno de gestão de ativos e inventário exclusivo para a rede corporativa Cirion Technologies, com autenticação Microsoft 365, Microsoft Authenticator e integração SharePoint." />
+    <meta property="og:title" content="Coletor qrcode - Controle de Ativos | Cirion Technologies" />
+    <meta property="og:description" content="Sistema corporativo interno de gestão de ativos e inventário exclusivo para a rede corporativa Cirion Technologies, com autenticação Microsoft 365, Microsoft Authenticator e integração SharePoint." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="cirion-preload-marker">
+        window.INITIAL_CIRION_ASSETS = [];
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        };
+        // Garante que o modo escuro nunca seja ativado automaticamente
+        try {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        } catch(e) {}
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        :root {
+            color-scheme: light !important;
+        }
+        html, body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        #root {
+            min-height: 100vh;
+            background-color: #f8fafc !important;
+        }
+        /* Mascara caracteres visualmente sem usar type="password", impedindo que o navegador ofereça salvar senha */
+        .mask-pass-input {
+            -webkit-text-security: disc !important;
+            text-security: disc !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

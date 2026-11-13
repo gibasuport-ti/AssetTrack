@@ -1,0 +1,83 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny-all catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions & Security Guards
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((request.auth.token.email == "gibasuporte@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidAsset(data) {
+      return data.keys().hasAll(['NumeroPatrimonio', 'serial', 'marca', 'modelo', 'TipoEquipamento', 'EstadoEquipamento', 'DataAquisicao']) &&
+             data.NumeroPatrimonio is string && data.NumeroPatrimonio.size() > 0 && data.NumeroPatrimonio.size() <= 100 &&
+             data.serial is string && data.serial.size() > 0 && data.serial.size() <= 100 &&
+             data.marca is string && data.marca.size() > 0 && data.marca.size() <= 100 &&
+             data.modelo is string && data.modelo.size() > 0 && data.modelo.size() <= 150 &&
+             data.TipoEquipamento is string && data.TipoEquipamento.size() > 0 && data.TipoEquipamento.size() <= 100 &&
+             data.EstadoEquipamento is string && data.EstadoEquipamento.size() > 0 && data.EstadoEquipamento.size() <= 100 &&
+             data.DataAquisicao is string && data.DataAquisicao.size() > 0 && data.DataAquisicao.size() <= 50 &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('observacao' in data) || (data.observacao is string && data.observacao.size() <= 2000)) &&
+             (!('situacao' in data) || (data.situacao is string && data.situacao.size() <= 100)) &&
+             (!('colaboradorId' in data) || (data.colaboradorId is string && data.colaboradorId.size() <= 100)) &&
+             (!('colaboradorNome' in data) || (data.colaboradorNome is string && data.colaboradorNome.size() <= 150)) &&
+             (!('colaboradorEmail' in data) || (data.colaboradorEmail is string && data.colaboradorEmail.size() <= 150)) &&
+             (!('fotos' in data) || (data.fotos is list && data.fotos.size() <= 6)) &&
+             (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50)) &&
+             (!('uid' in data) || (data.uid is string && data.uid.size() <= 128));
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /assets/{assetId} {
+      // Permite leitura para restauração, auditoria e migração para SharePoint Online
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow update: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /users/{userId} {
+      allow read: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow write: if isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /security_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

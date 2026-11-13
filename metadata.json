@@ -1,0 +1,10 @@
+{
+  "name": "Coletor qrcode - Controle de Ativos",
+  "description": "Sistema corporativo interno de gestão de ativos e inventário exclusivo para a rede corporativa Cirion Technologies, com autenticação Microsoft 365, Microsoft Authenticator e integração SharePoint.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
