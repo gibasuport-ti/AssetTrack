@@ -48,6 +48,29 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx" onerror="window.__CIRION_RAW_ENTRY_ERR__=true;"></script>
+    <script id="raw-github-pages-fallback">
+      (function () {
+        if (window.location.protocol === 'file:') return;
+        var path = window.location.pathname || '';
+        if (path.indexOf('cirion-coletor-standalone.html') !== -1 || path.indexOf('/dist/') !== -1) return;
+        var goToCompiled = function () {
+          if (window.__ASSETTRACK_APP_MOUNTED__) return;
+          var rootEl = document.getElementById('root');
+          if (rootEl && rootEl.childElementCount > 0) return;
+          window.location.replace('./cirion-coletor-standalone.html' + window.location.search + window.location.hash);
+        };
+        window.addEventListener('error', function (e) {
+          if (e && e.target && e.target.tagName === 'SCRIPT' && String(e.target.getAttribute('src') || '').indexOf('index.tsx') !== -1) {
+            goToCompiled();
+          }
+        }, true);
+        setTimeout(function () {
+          if (window.__CIRION_RAW_ENTRY_ERR__ || (!window.__ASSETTRACK_APP_MOUNTED__ && window.location.hostname.indexOf('github.io') !== -1)) {
+            goToCompiled();
+          }
+        }, 500);
+      })();
+    </script>
 </body>
 </html>

@@ -59,6 +59,9 @@ if (markerRegex.test(bundledHtml)) {
   console.log(`[Builder] Marcador cirion-preload-marker limpo (${optimizedAssets.length} ativos já empacotados no bundle JS).`);
 }
 
+// 3b. Remove script de fallback de HTML bruto do bundle já compilado
+bundledHtml = bundledHtml.replace(/<script id="raw-github-pages-fallback">[\s\S]*?<\/script>/g, '');
+
 // 4. Localiza o script module principal usando lastIndexOf para evitar tags internas de bibliotecas
 const scriptOpenTag = '<script type="module" crossorigin>';
 const openIdx = bundledHtml.indexOf(scriptOpenTag);
@@ -89,9 +92,10 @@ if (openIdx !== -1 && closeIdx > openIdx) {
   }
 }
 
-// 5. Grava nos destinos de distribuição
+// 5. Grava nos destinos de distribuição (inclui docs/index.html para GitHub Pages)
 const targets = [
   path.join(process.cwd(), 'dist', 'index.html'),
+  path.join(process.cwd(), 'docs', 'index.html'),
   path.join(process.cwd(), 'public', 'cirion-coletor-standalone.html'),
   path.join(process.cwd(), 'cirion-coletor-standalone.html'),
   path.join(process.cwd(), 'dist', 'cirion-coletor-standalone.html')
@@ -107,6 +111,15 @@ targets.forEach(target => {
   } catch (e) {
     console.error(`[Builder] Erro ao gravar em ${target}:`, e);
   }
+});
+
+// Garante arquivos .nojekyll para o GitHub Pages não filtrar arquivos estáticos
+[path.join(process.cwd(), '.nojekyll'), path.join(process.cwd(), 'docs', '.nojekyll')].forEach(p => {
+  try {
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(p, '', 'utf-8');
+  } catch (e) {}
 });
 
 console.log('[Builder] Concluído com sucesso! HTML 100% idêntico ao Web App e protegido contra vazamento de código.');

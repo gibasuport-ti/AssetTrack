@@ -17,6 +17,7 @@ function mount() {
         <App />
       </React.StrictMode>
     );
+    (window as any).__ASSETTRACK_APP_MOUNTED__ = true;
   } catch (error) {
     console.error("Erro fatal na inicialização:", error);
     rootElement.innerHTML = `
